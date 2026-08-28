@@ -1,0 +1,984 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { useParams, Link, useLocation } from 'react-router-dom';
+import { useAuth } from '../lib/AuthContext';
+import { db, handleFirestoreError, OperationType, syncTeacherSummary, syncExamResultsCover } from '../lib/firebase';
+import { triggerZaloCampaign } from '../lib/zaloUtils';
+import { collection, query, where, getDocs, doc, getDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { ArrowLeft, Users, CheckCircle, XCircle, Trash2, AlertCircle, BarChart3, Loader2, RefreshCw, Eye, Send, UserCheck, Filter } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from 'recharts';
+import MathText from '../components/MathText';
+import { syncClassSummary, syncClassStudentsCover } from '../lib/syncUtils';
+
+export default function ExamResults() {
+  const { examId } = useParams<{ examId: string }>();
+  const location = useLocation();
+  const { appUser } = useAuth();
+  const [exam, setExam] = useState<any>(null);
+  const [submissions, setSubmissions] = useState<any[]>([]);
+  const [students, setStudents] = useState<any[]>([]);
+  const [classes, setClasses] = useState<any[]>([]);
+  const [loadingNotificationData, setLoadingNotificationData] = useState(false);
+  const [submissionToDelete, setSubmissionToDelete] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [regradingId, setRegradingId] = useState<string | null>(null);
+  const [viewingDetailsId, setViewingDetailsId] = useState<string | null>(null);
+  const [viewingSubmissionDetails, setViewingSubmissionDetails] = useState<any>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showNotifyModal, setShowNotifyModal] = useState(false);
+  const [selectedNotifyClass, setSelectedNotifyClass] = useState<string>('');
+  const [selectedFilterClass, setSelectedFilterClass] = useState<string>('ALL');
+
+  const uniqueSubmissions = useMemo(() => {
+    const map = new Map();
+    submissions.forEach(sub => {
+      // Use studentId or studentName as key to handle older data without studentId.
+      const key = sub.studentId || sub.studentName || sub.id;
+      if (!map.has(key)) {
+        map.set(key, sub);
+      } else {
+        const existing = map.get(key);
+        const subDate = new Date(sub.submittedAt).getTime();
+        const existingDate = new Date(existing.submittedAt).getTime();
+        if (subDate > existingDate) {
+          map.set(key, sub);
+        }
+      }
+    });
+    const result = Array.from(map.values()).sort((a, b) => new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime());
+    return result;
+  }, [submissions]);
+
+  const loadNotificationData = async () => {
+    if (classes.length > 0 && students.length > 0) return;
+    setLoadingNotificationData(true);
+    try {
+      const qClasses = query(collection(db, 'classes'));
+      const classesSnap = await getDocs(qClasses);
+      const classesList = classesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setClasses(classesList);
+
+      let studs: any[] = [];
+      if (exam && exam.assignedClasses && exam.assignedClasses.length > 0) {
+        for (const cls of exam.assignedClasses) {
+          const coverDoc = await getDoc(doc(db, 'class_students_cover', cls));
+          if (coverDoc.exists()) {
+            const data = coverDoc.data();
+            studs = studs.concat((data.students || []).map((s: any) => ({ ...s, className: cls })));
+          } else {
+            const syncStuds = await syncClassStudentsCover(cls);
+            studs = studs.concat((syncStuds || []).map((s: any) => ({ ...s, className: cls })));
+          }
+        }
+      }
+      setStudents(studs);
+    } catch (err) {
+      console.error("Error loading notification data:", err);
+    } finally {
+      setLoadingNotificationData(false);
+    }
+  };
+
+  const fetchData = async (isManualRefresh = false) => {
+    if (!examId) return;
+    setIsRefreshing(true);
+    try {
+      let coverDoc = await getDoc(doc(db, 'exam_results_cover', examId));
+      let submissionsList = [];
+      let examData = null;
+
+      if (coverDoc.exists() && !isManualRefresh) {
+        const coverData = coverDoc.data();
+        submissionsList = coverData.submissionSummary || [];
+        if (!coverData.questions || !coverData.assignedClasses || !coverData.status || !coverData.teacherId) {
+          const cover = await syncExamResultsCover(examId);
+          submissionsList = cover.submissionSummary || [];
+          examData = { id: examId, ...cover };
+        } else {
+          examData = { id: examId, ...coverData };
+        }
+      } else {
+        // Fallback or Sync: fetch and sync first
+        const cover = await syncExamResultsCover(examId);
+        submissionsList = cover.submissionSummary || [];
+        examData = { id: examId, ...cover };
+      }
+
+      setExam(examData);
+      
+      const subs = submissionsList.map((s: any) => ({
+        id: s.submissionId,
+        studentId: s.studentId,
+        studentName: s.studentName,
+        studentClass: s.studentClass,
+        score: s.score,
+        incorrectQuestions: s.incorrectQuestions || [],
+        submittedAt: s.submittedAt
+      }));
+      setSubmissions(subs);
+
+      // Fetch students immediately to show class groupings
+      let studs: any[] = [];
+      if (examData && examData.assignedClasses && examData.assignedClasses.length > 0) {
+        for (const cls of examData.assignedClasses) {
+          const classCoverDoc = await getDoc(doc(db, 'class_students_cover', cls));
+          if (classCoverDoc.exists()) {
+            const data = classCoverDoc.data();
+            studs = studs.concat((data.students || []).map((s: any) => ({ ...s, className: cls })));
+          } else {
+            const syncStuds = await syncClassStudentsCover(cls);
+            studs = studs.concat((syncStuds || []).map((s: any) => ({ ...s, className: cls })));
+          }
+        }
+      }
+      setStudents(studs);
+    } catch (error) {
+      console.error("fetchData error:", error);
+      handleFirestoreError(error, OperationType.LIST, 'exam_results_data');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, [examId]);
+
+  if (!exam) return <div className="flex h-screen items-center justify-center">Đang tải...</div>;
+
+  const getStudentName = (studentId: string) => {
+    const student = students.find(s => s.uid === studentId);
+    if (student) return `${student.name} (${student.className})`;
+    
+    // Look up in submissions array
+    const foundSub = submissions.find(s => s.studentId === studentId);
+    if (foundSub && foundSub.studentName) {
+      return `${foundSub.studentName} ${foundSub.studentClass ? `(${foundSub.studentClass})` : ''}`;
+    }
+    return 'Học sinh không xác định';
+  };
+
+  const handleDeleteSubmission = async () => {
+    if (!submissionToDelete || !exam) return;
+    setIsDeleting(true);
+    try {
+      const subToRemove = submissions.find(s => s.id === submissionToDelete);
+      
+      await deleteDoc(doc(db, 'submissions', submissionToDelete));
+      
+      if (subToRemove && subToRemove.studentId) {
+        const userRef = doc(db, 'users', subToRemove.studentId);
+        const userDoc = await getDoc(userRef);
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          if (userData.completedExams) {
+            const newCompletedExams = userData.completedExams.filter((c: any) => c.examId !== exam.id);
+            await updateDoc(userRef, { completedExams: newCompletedExams });
+          }
+        }
+      }
+      
+      // Also remove from exam's submissionSummary
+      if (exam.submissionSummary) {
+        const updatedSummary = exam.submissionSummary.filter((s: any) => s.submissionId !== submissionToDelete);
+        await updateDoc(doc(db, 'exams', exam.id), {
+          submissionSummary: updatedSummary
+        });
+        await updateDoc(doc(db, 'exams_metadata', exam.id), {
+          submissionSummary: updatedSummary
+        }).catch(err => console.warn("Failed to update exams_metadata summary:", err));
+        setExam({ ...exam, submissionSummary: updatedSummary });
+        setSubmissions(submissions.filter(s => s.id !== submissionToDelete));
+        
+        await syncTeacherSummary(appUser?.uid || exam.teacherId);
+        if (exam.assignedClasses) {
+          for (const cls of exam.assignedClasses) {
+             await syncClassSummary(cls);
+          }
+        }
+        
+        // Sync inner cover sheet for the exam results
+        await syncExamResultsCover(exam.id);
+      }
+      
+      setSubmissionToDelete(null);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `submissions/${submissionToDelete}`);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleRegrade = async (submission: any) => {
+    if (!exam) return;
+    setRegradingId(submission.id);
+    try {
+      // Fetch the full submission document to get the answers
+      const subDocRef = doc(db, 'submissions', submission.id);
+      const subDoc = await getDoc(subDocRef);
+      if (!subDoc.exists()) throw new Error('Không tìm thấy bài làm');
+      const subData = subDoc.data();
+
+      const answers = typeof subData.answers === 'string' ? JSON.parse(subData.answers || '{}') : subData.answers;
+      let score = 0;
+      let incorrectQuestions: string[] = [];
+
+      exam.questions.forEach((q: any) => {
+        const studentAnswer = answers[q.id];
+        const correctAnswer = q.correctAnswer;
+
+        if (q.type === 'multiple_choice') {
+          if (studentAnswer === correctAnswer) {
+            score += 0.25;
+          } else {
+            incorrectQuestions.push(q.id);
+          }
+        } else if (q.type === 'true_false') {
+          try {
+            const correctArr = JSON.parse(correctAnswer || '[]');
+            const studentArr = studentAnswer || [];
+            let correctParts = 0;
+            for (let i = 0; i < 4; i++) {
+              if (studentArr[i] === correctArr[i]) correctParts++;
+            }
+            if (correctParts === 1) score += 0.1;
+            else if (correctParts === 2) score += 0.25;
+            else if (correctParts === 3) score += 0.5;
+            else if (correctParts === 4) score += 1.0;
+            
+            if (correctParts < 4) incorrectQuestions.push(q.id);
+          } catch (e) {
+            incorrectQuestions.push(q.id);
+          }
+        } else if (q.type === 'short_answer') {
+          if (studentAnswer && studentAnswer.trim() === correctAnswer?.trim()) {
+            score += 0.5;
+          } else {
+            incorrectQuestions.push(q.id);
+          }
+        }
+      });
+
+      await updateDoc(doc(db, 'submissions', submission.id), {
+        score,
+        incorrectQuestions
+      });
+
+      // Also update the score in the exam's submissionSummary
+      const updatedSummary = exam.submissionSummary.map((s: any) => {
+        if (s.submissionId === submission.id) {
+          return { ...s, score };
+        }
+        return s;
+      });
+      await updateDoc(doc(db, 'exams', exam.id), {
+        submissionSummary: updatedSummary
+      });
+      await updateDoc(doc(db, 'exams_metadata', exam.id), {
+        submissionSummary: updatedSummary
+      }).catch(err => console.warn("Failed to update exams_metadata summary:", err));
+      
+      // Update local state
+      setExam({ ...exam, submissionSummary: updatedSummary });
+      setSubmissions(submissions.map(s => s.id === submission.id ? { ...s, score } : s));
+
+      await syncTeacherSummary(appUser?.uid || exam.teacherId);
+      if (exam.assignedClasses) {
+        for (const cls of exam.assignedClasses) {
+           await syncClassSummary(cls);
+        }
+      }
+      
+      // Sync inner cover sheet for the exam results
+      await syncExamResultsCover(exam.id);
+
+      alert('Đã chấm lại thành công!');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `submissions/${submission.id}`);
+    } finally {
+      setRegradingId(null);
+    }
+  };
+
+  const handleViewDetails = async (subId: string) => {
+    setViewingDetailsId(subId);
+    try {
+      const subDoc = await getDoc(doc(db, 'submissions', subId));
+      if (subDoc.exists()) {
+        setViewingSubmissionDetails({ id: subDoc.id, ...subDoc.data() });
+      }
+    } catch (error) {
+      console.error("Error fetching submission details:", error);
+    }
+  };
+
+  const closeDetails = () => {
+    setViewingDetailsId(null);
+    setViewingSubmissionDetails(null);
+  };
+
+  const notifyScoreZalo = (target: 'student' | 'parent') => {
+    if (!exam) return;
+    const gradedSubs = uniqueSubmissions.filter(s => s.score !== undefined && s.score !== null);
+    if (gradedSubs.length === 0) {
+      alert("Chưa có học sinh nào có điểm để gửi.");
+      return;
+    }
+    const campaignData: Array<{ phone: string, message: string }> = [];
+    for (const sub of gradedSubs) {
+      const student = students.find(s => s.uid === sub.studentId || s.name === sub.studentName);
+      
+      // Filter by selected class if specified
+      if (selectedFilterClass !== 'ALL') {
+        const studentClass = sub.studentClass || (student && student.className) || '';
+        if (studentClass !== selectedFilterClass) continue;
+      }
+
+      if (target === 'student') {
+        const zalo = (student && student.zalo) || sub.studentZalo || null;
+        if (!zalo) continue;
+        const msg = `Chào em: ${sub.studentName}. Hiện tại đã có kết quả bài thi: ${exam.title || 'Trắc nghiệm'}. Điểm số của em: ${sub.score} / 10. Em đăng nhập hệ thống để xem chi tiết bài làm nhé!`;
+        campaignData.push({ phone: zalo, message: msg });
+      } else {
+        const parentPhone = student?.parentPhone || null;
+        if (!parentPhone) continue;
+        const className = student?.className || sub.studentClass || '';
+        const classStr = className ? ` - Lớp: ${className}` : '';
+        const msg = `Kính gửi Phụ huynh của học sinh: ${sub.studentName}${classStr}: Đã có kết quả bài thi "${exam.title || 'Trắc nghiệm'}". Điểm số của em đạt: ${sub.score} / 10. Kính báo Phụ huynh theo dõi tình hình học tập của con!`;
+        campaignData.push({ phone: parentPhone, message: msg });
+      }
+    }
+
+    if (campaignData.length === 0) {
+      const targetLabel = target === 'student' ? 'học sinh' : 'phụ huynh';
+      const classLabel = selectedFilterClass === 'ALL' ? '' : ` của lớp ${selectedFilterClass}`;
+      alert(`Không tìm thấy số Zalo/SĐT của ${targetLabel} nào có điểm${classLabel}. Vui lòng kiểm tra lại danh bạ.`);
+      return;
+    }
+    triggerZaloCampaign(campaignData);
+  };
+
+  const notifyNotDoneZalo = (target: 'student' | 'parent') => {
+    if (!exam || !students || students.length === 0) {
+      alert("Danh sách học sinh trống hoặc chưa giao cho lớp nào.");
+      return;
+    }
+    const campaignData: Array<{ phone: string, message: string }> = [];
+    const submittedStudentIds = new Set(uniqueSubmissions.map(s => s.studentId).filter(Boolean));
+    const submittedStudentNames = new Set(uniqueSubmissions.map(s => s.studentName).filter(Boolean));
+
+    const targetStudents = selectedFilterClass === 'ALL' 
+      ? students 
+      : students.filter(s => s.className === selectedFilterClass);
+
+    for (const s of targetStudents) {
+      const isDone = (s.uid && submittedStudentIds.has(s.uid)) || (s.name && submittedStudentNames.has(s.name));
+      if (!isDone) {
+        if (target === 'student') {
+          if (s.zalo) {
+            const msg = `Chào em: ${s.name}. Thầy nhắc em hiện tại có bài tập chưa làm: ${exam.title || 'Trắc nghiệm'}. Em nhớ đăng nhập vào làm trước hạn nhé!`;
+            campaignData.push({ phone: s.zalo, message: msg });
+          }
+        } else {
+          if (s.parentPhone) {
+            const classStr = s.className ? ` - Lớp: ${s.className}` : '';
+            const msg = `Kính gửi Phụ huynh của học sinh: ${s.name}${classStr}: Hiện tại em vẫn CHƯA HOÀN THÀNH bài tập "${exam.title || 'Trắc nghiệm'}". Kính nhờ Phụ huynh nhắc nhở con vào hệ thống làm bài trước hạn!`;
+            campaignData.push({ phone: s.parentPhone, message: msg });
+          }
+        }
+      }
+    }
+
+    if (campaignData.length === 0) {
+      const targetLabel = target === 'student' ? 'học sinh' : 'phụ huynh';
+      const classLabel = selectedFilterClass === 'ALL' ? '' : ` thuộc lớp ${selectedFilterClass}`;
+      alert(`Tất cả ${targetLabel}${classLabel} đều đã làm bài hoặc chưa có số điện thoại.`);
+      return;
+    }
+    triggerZaloCampaign(campaignData);
+  };
+
+  const executeSendSummaryZalo = () => {
+    if (!selectedNotifyClass) return;
+
+    const filteredStudents = students.filter(s => s.className === selectedNotifyClass);
+
+    const doneStudents = filteredStudents.filter(student => 
+      uniqueSubmissions.some(sub => sub.studentId === student.uid)
+    ).map(student => {
+      const sub = uniqueSubmissions.find(s => s.studentId === student.uid);
+      return { name: student.name, score: sub?.score || 0 };
+    }).sort((a, b) => b.score - a.score);
+
+    const notDoneStudents = filteredStudents.filter(student => 
+      !uniqueSubmissions.some(sub => sub.studentId === student.uid)
+    );
+
+    let message = `📊 KẾT QUẢ: ${exam.title || 'Bài tập'} (LỚP ${selectedNotifyClass}) 📊\n\n`;
+
+    if (doneStudents.length > 0) {
+      message += `✅ ĐÃ LÀM BÀI (${doneStudents.length}):\n`;
+      doneStudents.forEach((st, idx) => {
+        message += `${idx + 1}. ${st.name}: ${st.score.toFixed(2)} điểm\n`;
+      });
+      message += `\n`;
+    }
+
+    if (notDoneStudents.length > 0) {
+      message += `❌ CHƯA LÀM BÀI (${notDoneStudents.length}):\n`;
+      notDoneStudents.forEach((st, idx) => {
+        message += `${idx + 1}. ${st.name}\n`;
+      });
+      message += `\n`;
+    }
+
+    message += `👉 Link đăng nhập: ${window.location.origin}`;
+
+    navigator.clipboard.writeText(message).catch(err => console.error("Failed to copy", err));
+    
+    // Find class Zalo link
+    const classInfo = classes.find(c => c.name === selectedNotifyClass);
+    if (classInfo && classInfo.zaloLink) {
+      let webLink = classInfo.zaloLink;
+      if (webLink.includes('zalo.me/g/')) {
+        webLink = webLink.replace('zalo.me/g/', 'chat.zalo.me/?g=');
+      }
+      window.open(webLink, '_blank', 'noopener,noreferrer');
+    } else {
+      window.open('https://chat.zalo.me/', '_blank', 'noopener,noreferrer');
+    }
+    
+    setShowNotifyModal(false);
+  };
+
+  const getScoreDistribution = () => {
+    const bins: { name: string, count: number }[] = [];
+    for (let i = 0; i <= 20; i++) {
+      bins.push({ name: (i * 0.5).toFixed(1), count: 0 });
+    }
+    
+    uniqueSubmissions.forEach(sub => {
+      // Round to nearest 0.5
+      const roundedScore = Math.round(sub.score * 2) / 2;
+      const binIndex = Math.max(0, Math.min(20, roundedScore * 2));
+      bins[binIndex].count++;
+    });
+    return bins;
+  };
+
+  const scoreData = getScoreDistribution();
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50/30 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="mb-8 bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div className="flex items-center">
+            <Link to="/teacher" className="text-gray-400 hover:text-indigo-600 mr-4 transition-colors p-2 hover:bg-indigo-50 rounded-full">
+              <ArrowLeft className="w-6 h-6" />
+            </Link>
+            <div>
+              <h1 className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600">Kết quả: {exam.title}</h1>
+              <p className="text-sm font-medium text-gray-500 mt-1 flex items-center gap-3">
+                <span className="flex items-center">
+                  <Users className="w-4 h-4 mr-1.5 text-indigo-500" />
+                  Số bài nộp: <strong className="ml-1 text-indigo-600">{uniqueSubmissions.length}</strong>
+                </span>
+                {exam.assignedClasses && exam.assignedClasses.length > 0 && (
+                  <span className="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-semibold">
+                    Lớp: {exam.assignedClasses.join(', ')}
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+          
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Filter by class */}
+            {exam.assignedClasses && exam.assignedClasses.length > 0 && (
+              <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 mr-1">
+                <Filter className="w-4 h-4 text-slate-500 mr-2" />
+                <select
+                  value={selectedFilterClass}
+                  onChange={(e) => setSelectedFilterClass(e.target.value)}
+                  className="bg-transparent text-sm font-semibold text-slate-700 outline-none cursor-pointer"
+                  title="Chọn lớp để gửi tin Zalo"
+                >
+                  <option value="ALL">Tất cả các lớp</option>
+                  {exam.assignedClasses.map((c: string) => (
+                    <option key={c} value={c}>Lớp {c}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Báo điểm Học sinh */}
+            <button 
+              onClick={() => notifyScoreZalo('student')} 
+              className="flex items-center px-3.5 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200/60 rounded-xl text-sm font-semibold hover:bg-emerald-100 transition-colors shadow-sm"
+              title="Gửi điểm Zalo cho Học sinh"
+            >
+              <Send className="w-4 h-4 mr-1.5 text-emerald-600" />
+              <span>Báo điểm HS</span>
+            </button>
+
+            {/* Nhắc chưa làm Học sinh */}
+            <button 
+              onClick={() => notifyNotDoneZalo('student')} 
+              className="flex items-center px-3.5 py-2 bg-amber-50 text-amber-700 border border-amber-200/60 rounded-xl text-sm font-semibold hover:bg-amber-100 transition-colors shadow-sm"
+              title="Gửi tin Zalo nhắc Học sinh chưa làm bài"
+            >
+              <AlertCircle className="w-4 h-4 mr-1.5 text-amber-600" />
+              <span>Nhắc chưa làm HS</span>
+            </button>
+
+            {/* Báo điểm Phụ huynh */}
+            <button 
+              onClick={() => notifyScoreZalo('parent')} 
+              className="flex items-center px-3.5 py-2 bg-blue-50 text-blue-700 border border-blue-200/60 rounded-xl text-sm font-semibold hover:bg-blue-100 transition-colors shadow-sm"
+              title="Gửi tin Zalo báo điểm cho Phụ huynh học sinh"
+            >
+              <UserCheck className="w-4 h-4 mr-1.5 text-blue-600" />
+              <span>Báo điểm Phụ huynh</span>
+            </button>
+
+            {/* Nhắc chưa làm Phụ huynh */}
+            <button 
+              onClick={() => notifyNotDoneZalo('parent')} 
+              className="flex items-center px-3.5 py-2 bg-orange-50 text-orange-700 border border-orange-200/60 rounded-xl text-sm font-semibold hover:bg-orange-100 transition-colors shadow-sm"
+              title="Gửi tin Zalo nhắc Phụ huynh đôn đốc con làm bài"
+            >
+              <Users className="w-4 h-4 mr-1.5 text-orange-600" />
+              <span>Nhắc Phụ huynh</span>
+            </button>
+
+            {/* Thông báo nhóm Zalo */}
+            <button
+              onClick={async () => {
+                if (exam.assignedClasses && exam.assignedClasses.length > 0) {
+                  setSelectedNotifyClass(selectedFilterClass !== 'ALL' ? selectedFilterClass : exam.assignedClasses[0]);
+                }
+                setShowNotifyModal(true);
+                await loadNotificationData();
+              }}
+              className="flex items-center px-3 py-2 bg-indigo-50 text-indigo-700 border border-indigo-200/60 rounded-xl text-sm font-semibold hover:bg-indigo-100 transition-colors shadow-sm"
+              title="Gửi bảng tổng hợp điểm vào nhóm Zalo"
+            >
+              <Send className="w-4 h-4 mr-1.5 text-indigo-600" />
+              <span>Báo nhóm</span>
+            </button>
+
+            {/* Nút Làm mới */}
+            <button
+              onClick={() => fetchData(true)}
+              disabled={isRefreshing}
+              className="flex items-center px-3 py-2 bg-slate-100 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-200 transition-colors shadow-sm"
+              title="Tải lại dữ liệu"
+            >
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+        </div>
+
+        {uniqueSubmissions.length > 0 && (
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-8">
+            <h2 className="text-lg font-bold text-gray-800 mb-6 flex items-center">
+              <span className="bg-indigo-100 text-indigo-600 p-2 rounded-lg mr-3">
+                <BarChart3 className="w-5 h-5" />
+              </span>
+              Phổ điểm
+            </h2>
+            <div className="h-80 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart
+                  data={scoreData}
+                  margin={{ top: 20, right: 30, left: 0, bottom: 20 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                  <XAxis 
+                    dataKey="name" 
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: '#6B7280', fontSize: 12 }}
+                    dy={10}
+                    label={{ value: 'Điểm số', position: 'insideBottom', offset: -15, fill: '#4B5563', fontSize: 14, fontWeight: 500 }}
+                  />
+                  <YAxis 
+                    allowDecimals={false}
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: '#6B7280', fontSize: 12 }}
+                    label={{ value: 'Số lượng', angle: -90, position: 'insideLeft', fill: '#4B5563', fontSize: 14, fontWeight: 500 }}
+                  />
+                  <Tooltip 
+                    cursor={{ stroke: '#F3F4F6', strokeWidth: 2 }}
+                    contentStyle={{ borderRadius: '0.75rem', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)' }}
+                    formatter={(value: number) => [`${value} học sinh`, 'Số lượng']}
+                    labelFormatter={(label) => `Điểm: ${label}`}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="count" 
+                    stroke="#6366F1" 
+                    strokeWidth={3}
+                    dot={{ r: 4, fill: '#6366F1', strokeWidth: 2, stroke: '#fff' }}
+                    activeDot={{ r: 6, fill: '#4F46E5', strokeWidth: 0 }}
+                  >
+                    <LabelList dataKey="count" position="top" fill="#4F46E5" fontSize={12} fontWeight={600} formatter={(val: number) => val > 0 ? val : ''} offset={10} />
+                  </Line>
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+
+        {uniqueSubmissions.length === 0 ? (
+          <div className="bg-white shadow-lg rounded-2xl border border-gray-100 overflow-hidden">
+            <ul className="divide-y divide-gray-100">
+              <li className="px-8 py-12 text-center text-gray-500 font-medium flex flex-col items-center justify-center">
+                <div className="bg-gray-50 p-4 rounded-full mb-3">
+                  <Users className="w-8 h-8 text-gray-400" />
+                </div>
+                Chưa có học sinh nào nộp bài.
+              </li>
+            </ul>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {(() => {
+              const groupedSubmissions = uniqueSubmissions.reduce((acc, sub) => {
+                const student = students.find(s => s.uid === sub.studentId) || { className: 'Khác' };
+                const className = sub.studentClass || student.className || 'Khác';
+                if (!acc[className]) acc[className] = [];
+                acc[className].push(sub);
+                return acc;
+              }, {} as Record<string, any[]>);
+
+              const sortedClasses = Object.keys(groupedSubmissions).sort((a, b) => {
+                if (a === 'Khác') return 1;
+                if (b === 'Khác') return -1;
+                return a.localeCompare(b);
+              });
+
+              return sortedClasses.map(className => (
+                <details key={className} className="group bg-white shadow-sm rounded-2xl border border-slate-200/60 [&_summary::-webkit-details-marker]:hidden">
+                  <summary className="px-6 py-4 bg-indigo-50/50 hover:bg-indigo-100/50 border-b border-indigo-100 rounded-2xl group-open:rounded-b-none cursor-pointer outline-none flex justify-between items-center transition-colors list-none">
+                    <h3 className="text-lg font-bold text-indigo-900 flex items-center">
+                      {className === 'Khác' ? 'Khác' : `Lớp ${className}`}
+                      <span className="ml-3 bg-indigo-100 text-indigo-700 py-0.5 px-2.5 rounded-full text-sm font-semibold">
+                        {groupedSubmissions[className].length} bài
+                      </span>
+                    </h3>
+                    <svg className="w-5 h-5 text-indigo-400 group-open:rotate-180 transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </summary>
+                  <ul className="divide-y divide-gray-100">
+                    {[...groupedSubmissions[className]]
+                      .sort((a, b) => new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime())
+                      .map((sub) => {
+                      const student = students.find(s => s.uid === sub.studentId) || { name: 'Học sinh' };
+                      
+                      const handleNotify = async () => {
+                try {
+                  // Priority 1: Check embedded info first
+                  let zalo = sub.studentZalo || null;
+                  let facebook = sub.studentFacebook || null;
+
+                  // Priority 2: Fallback to preloaded student info or fetch on-demand
+                  if (!zalo && !facebook) {
+                    if (student.zalo || student.facebook) {
+                      zalo = student.zalo || null;
+                      facebook = student.facebook || null;
+                    } else if (sub.studentId) {
+                      console.log(`[Lazy Loading] Fetching student contact info for exam: ${sub.studentId}`);
+                      const userDoc = await getDoc(doc(db, 'users', sub.studentId));
+                      if (userDoc.exists()) {
+                        const userData = userDoc.data();
+                        zalo = userData.zalo || null;
+                        facebook = userData.facebook || null;
+                      }
+                    }
+                  }
+
+                  const studentName = student.name && student.name !== 'Học sinh' ? student.name : (sub.studentName || 'em');
+                  const message = `🎉 KẾT QUẢ BÀI THI 🎉\n\nChào ${studentName}, em đã hoàn thành bài thi: "${exam.title || 'Bài tập'}"\n\n🎯 Điểm số: ${sub.score.toFixed(2)} / 10 điểm.\n👉 Hãy tiếp tục cố gắng nhé!\n🔗 Xem lại bài làm: ${window.location.origin}`;
+                  
+                  await navigator.clipboard.writeText(message);
+                  
+                  if (zalo) {
+                    window.open(`https://chat.zalo.me/?phone=${zalo}`, '_blank', 'noopener,noreferrer');
+                  } else if (facebook) {
+                    window.open(facebook, '_blank', 'noopener,noreferrer');
+                  } else {
+                    window.open(`https://chat.zalo.me/`, '_blank', 'noopener,noreferrer');
+                  }
+                } catch (err) {
+                  console.error("Lỗi gửi thông báo:", err);
+                  window.open(`https://chat.zalo.me/`, '_blank', 'noopener,noreferrer');
+                }
+              };
+
+              return (
+              <li key={sub.id} className="px-6 py-6 hover:bg-gray-50/50 transition-colors">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center mb-4 sm:mb-0">
+                    <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-full flex items-center justify-center border border-indigo-200 shadow-sm">
+                      <Users className="h-6 w-6 text-indigo-600" />
+                    </div>
+                    <div className="ml-5">
+                      <h3 className="text-lg font-bold text-gray-900">{getStudentName(sub.studentId)}</h3>
+                      <p className="text-sm font-medium text-gray-500 mt-0.5">
+                        Nộp lúc: {new Date(sub.submittedAt).toLocaleString('vi-VN')}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-left sm:text-right flex flex-col sm:items-end">
+                    <div className="flex items-center justify-between sm:justify-end w-full">
+                      <div className="bg-indigo-50 px-4 py-2 rounded-xl border border-indigo-100 mr-4">
+                        <p className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600">{sub.score.toFixed(2)} <span className="text-base text-indigo-300 font-bold">/ 10</span></p>
+                      </div>
+                      <button
+                        onClick={handleNotify}
+                        className="text-blue-500 hover:text-blue-700 p-2.5 rounded-xl hover:bg-blue-50 transition-colors border border-transparent hover:border-blue-100 mr-2"
+                        title="Báo kết quả qua Zalo/FB"
+                      >
+                        <Send className="w-5 h-5" />
+                      </button>
+                      <button
+                        onClick={() => handleRegrade(sub)}
+                        disabled={regradingId === sub.id}
+                        className="text-indigo-400 hover:text-indigo-600 p-2.5 rounded-xl hover:bg-indigo-50 transition-colors border border-transparent hover:border-indigo-100 mr-2 disabled:opacity-50"
+                        title="Chấm lại bài này"
+                      >
+                        {regradingId === sub.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <RefreshCw className="w-5 h-5" />}
+                      </button>
+                      <button
+                        onClick={() => setSubmissionToDelete(sub.id)}
+                        className="text-red-400 hover:text-red-600 p-2.5 rounded-xl hover:bg-red-50 transition-colors border border-transparent hover:border-red-100"
+                        title="Xóa kết quả để học sinh làm lại"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    </div>
+                    {sub.incorrectQuestions && sub.incorrectQuestions.length > 0 ? (
+                      <div className="text-sm text-rose-600 flex items-center justify-between sm:justify-end mt-3 bg-rose-50/50 px-3 py-2 rounded-lg border border-rose-100 w-full sm:w-auto">
+                        <div className="flex items-center font-bold mr-4">
+                          <XCircle className="w-4 h-4 mr-1.5" />
+                          {sub.incorrectQuestions.length} câu sai
+                        </div>
+                        <button
+                          onClick={() => handleViewDetails(sub.id)}
+                          className="flex items-center text-xs font-bold bg-white border border-rose-200 text-rose-600 px-3 py-1.5 rounded-md hover:bg-rose-50 transition-colors shadow-sm"
+                        >
+                          <Eye className="w-3.5 h-3.5 mr-1.5" />
+                          Xem chi tiết
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="text-sm text-emerald-600 flex items-center sm:justify-end mt-3 bg-emerald-50/50 px-3 py-2 rounded-lg border border-emerald-100 font-bold">
+                        <CheckCircle className="w-4 h-4 mr-1.5" />
+                        Hoàn hảo! Không sai câu nào.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </li>
+              );
+            })}
+          </ul>
+                </details>
+              ));
+            })()}
+          </div>
+        )}
+      </div>
+
+      {/* Delete Submission Confirmation Modal */}
+      {submissionToDelete && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[60] animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl">
+            <div className="flex items-center justify-center w-12 h-12 mx-auto bg-red-100 rounded-full mb-4">
+              <AlertCircle className="w-6 h-6 text-red-600" />
+            </div>
+            <h3 className="text-xl font-bold text-center text-gray-900 mb-2">Xác nhận xóa kết quả</h3>
+            <p className="text-center text-gray-600 mb-6">
+              Bạn có chắc chắn muốn xóa kết quả bài làm này? Sau khi xóa, học sinh sẽ có thể làm lại bài thi. Hành động này không thể hoàn tác.
+            </p>
+            <div className="flex justify-center space-x-3">
+              <button 
+                onClick={() => setSubmissionToDelete(null)} 
+                className="px-5 py-2.5 border border-gray-300 rounded-xl text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+                disabled={isDeleting}
+              >
+                Hủy
+              </button>
+              <button 
+                onClick={handleDeleteSubmission} 
+                className="px-5 py-2.5 border border-transparent rounded-xl text-sm font-medium text-white bg-red-600 hover:bg-red-700 transition-colors shadow-sm"
+                disabled={isDeleting}
+              >
+                {isDeleting ? 'Đang xóa...' : 'Đồng ý xóa'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Details Modal */}
+      {viewingDetailsId && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[60] animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+              <h3 className="text-xl font-bold text-gray-900 flex items-center">
+                <XCircle className="w-6 h-6 text-rose-500 mr-2" />
+                Chi tiết các câu trả lời sai
+              </h3>
+              <button 
+                onClick={closeDetails}
+                className="text-gray-400 hover:text-gray-600 p-2 rounded-full hover:bg-gray-100 transition-colors"
+              >
+                <XCircle className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto flex-1 bg-gray-50/30">
+              {(() => {
+                const sub = viewingSubmissionDetails;
+                if (!sub || !sub.incorrectQuestions || !exam || !exam.questions) {
+                  return <div className="flex justify-center items-center h-32"><Loader2 className="w-8 h-8 animate-spin text-indigo-500" /></div>;
+                }
+                
+                return (
+                  <div className="space-y-6">
+                    {sub.incorrectQuestions.map((qId: string) => {
+                      const qIndex = exam.questions.findIndex((q: any) => String(q.id) === String(qId));
+                      const q = exam.questions[qIndex];
+                      
+                      if (!q) {
+                        return (
+                          <div key={qId} className="bg-white p-5 rounded-xl border border-rose-100 shadow-sm">
+                            <div className="text-rose-500 font-medium">Không tìm thấy dữ liệu cho câu hỏi này (ID: {qId}). Có thể câu hỏi đã bị xóa hoặc thay đổi.</div>
+                          </div>
+                        );
+                      }
+                      
+                      let studentAns: any = '';
+                      try {
+                        const parsedAnswers = typeof sub.answers === 'string' ? JSON.parse(sub.answers) : sub.answers;
+                        studentAns = parsedAnswers[qId];
+                      } catch (e) {}
+                      
+                      let displayStudentAns = String(studentAns || '(Trống)');
+                      let displayCorrectAns = String(q.correctAnswer || '(Trống)');
+                      
+                      if (q.type === 'true_false') {
+                        try {
+                          const sArr = Array.isArray(studentAns) ? studentAns : [];
+                          const cArr = typeof q.correctAnswer === 'string' ? JSON.parse(q.correctAnswer || '[]') : (q.correctAnswer || []);
+                          displayStudentAns = sArr.map((v: any) => v === true ? 'Đúng' : v === false ? 'Sai' : 'Trống').join(' | ');
+                          displayCorrectAns = cArr.map((v: any) => v === true ? 'Đúng' : v === false ? 'Sai' : 'Trống').join(' | ');
+                          if (!displayStudentAns) displayStudentAns = '(Trống)';
+                        } catch(e) {}
+                      }
+                      
+                      return (
+                        <div key={qId} className="bg-white p-5 rounded-xl border border-rose-100 shadow-sm">
+                          <div className="font-bold text-lg text-gray-800 mb-3 pb-2 border-b border-gray-100">
+                            Câu {qIndex !== -1 ? qIndex + 1 : '?'}
+                          </div>
+                          
+                          <div className="mb-4 text-gray-700 bg-gray-50 p-4 rounded-lg border border-gray-100">
+                            <MathText text={q.content} />
+                            
+                            {Array.isArray(q.options) && q.options.length > 0 && (
+                              <div className="mt-4 space-y-2">
+                                {q.options.map((opt: string, i: number) => {
+                                  const letter = q.type === 'true_false' ? String.fromCharCode(97 + i) : String.fromCharCode(65 + i);
+                                  return (
+                                    <div key={i} className="flex items-start text-sm">
+                                      <span className="font-semibold mr-2">{letter}.</span>
+                                      <MathText text={opt} />
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                          
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="bg-rose-50 p-3 rounded-lg border border-rose-100">
+                              <div className="text-xs font-bold text-rose-500 uppercase tracking-wider mb-1">Học sinh chọn</div>
+                              <div className="font-medium text-rose-700">{displayStudentAns}</div>
+                            </div>
+                            <div className="bg-emerald-50 p-3 rounded-lg border border-emerald-100">
+                              <div className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1">Đáp án đúng</div>
+                              <div className="font-medium text-emerald-700">{displayCorrectAns}</div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+            
+            <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-end">
+              <button 
+                onClick={closeDetails}
+                className="px-6 py-2.5 bg-white border border-gray-300 rounded-xl text-sm font-bold text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Notify Modal */}
+      {showNotifyModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl">
+            <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center">
+              <Send className="w-5 h-5 mr-2 text-indigo-500" />
+              Thông báo nhóm
+            </h3>
+            {loadingNotificationData ? (
+              <div className="flex flex-col items-center py-6">
+                <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mb-2" />
+                <p className="text-sm text-gray-500">Đang tải danh sách học sinh...</p>
+              </div>
+            ) : (
+              <div className="mb-6">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Chọn lớp cần thông báo</label>
+                <select
+                  value={selectedNotifyClass}
+                  onChange={(e) => setSelectedNotifyClass(e.target.value)}
+                  className="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-indigo-500 outline-none"
+                >
+                  <option value="">-- Chọn lớp --</option>
+                  {exam.assignedClasses && exam.assignedClasses.map((cls: string) => (
+                    <option key={cls} value={cls}>{cls}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setShowNotifyModal(false)}
+                className="px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-xl hover:bg-gray-200 transition-colors"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={executeSendSummaryZalo}
+                disabled={!selectedNotifyClass}
+                className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-50"
+              >
+                Gửi Zalo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

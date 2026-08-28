@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cẩm Nang Hướng Dẫn Triển Khai Hệ Thống Dành Cho Giáo Viên</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      line-height: 1.65;
+      color: #1e293b;
+      background-color: #f8fafc;
+      margin: 0;
+      padding: 24px;
+    }
+    .container {
+      max-width: 880px;
+      margin: 0 auto;
+      background: #ffffff;
+      padding: 40px;
+      border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+      border: 1px solid #e2e8f0;
+    }
+    h1 {
+      color: #1e40af;
+      font-size: 26px;
+      border-bottom: 3px solid #3b82f6;
+      padding-bottom: 12px;
+      margin-top: 0;
+    }
+    h2 {
+      color: #0f172a;
+      font-size: 20px;
+      margin-top: 32px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-left: 4px solid #3b82f6;
+      padding-left: 12px;
+    }
+    h3 {
+      color: #334155;
+      font-size: 17px;
+      margin-top: 20px;
+    }
+    .step-box {
+      background: #f1f5f9;
+      border-left: 4px solid #0284c7;
+      padding: 16px 20px;
+      border-radius: 0 8px 8px 0;
+      margin: 16px 0;
+    }
+    .prompt-box {
+      background: #fdf4ff;
+      border-left: 4px solid #a855f7;
+      padding: 16px 20px;
+      border-radius: 0 8px 8px 0;
+      margin: 16px 0;
+    }
+    .success-box {
+      background: #f0fdf4;
+      border-left: 4px solid #22c55e;
+      padding: 16px 20px;
+      border-radius: 0 8px 8px 0;
+      margin: 16px 0;
+      color: #166534;
+    }
+    code {
+      background: #e2e8f0;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'Consolas', 'Courier New', monospace;
+      color: #0f172a;
+      font-size: 14px;
+    }
+    pre {
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 16px;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .btn-print {
+      display: inline-block;
+      background: #2563eb;
+      color: white;
+      padding: 10px 20px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 600;
+      margin-bottom: 20px;
+      cursor: pointer;
+      border: none;
+    }
+    @media print {
+      body { background: white; padding: 0; }
+      .container { border: none; box-shadow: none; padding: 0; max-width: 100%; }
+      .btn-print { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <button class="btn-print" onclick="window.print()">🖨️ Lưu thành PDF / In tài liệu này</button>
+    
+    <h1>📘 CẨM NANG HƯỚNG DẪN TRIỂN KHAI HỆ THỐNG DÀNH CHO GIÁO VIÊN</h1>
+    <p><em>Hệ thống quản lý ôn tập, thi trắc nghiệm & tự luận thông minh tích hợp trí tuệ nhân tạo (AI Gemini chấm điểm tự động & Tiện ích Zalo tự động báo điểm phụ huynh).</em></p>
+
+    <div class="success-box">
+      <strong>✅ TÍNH ĐỘC LẬP & BẢO MẬT TUYỆT ĐỐI:</strong><br>
+      Gói mã nguồn này đã được làm sạch toàn bộ dữ liệu cá nhân. Khi Thầy/Cô tiếp nhận và triển khai, toàn bộ dữ liệu học sinh, đề thi và điểm số sẽ được lưu trữ trên tài khoản riêng của chính Thầy/Cô, không bị trùng lặp hay chia sẻ với bất kỳ ai.
+    </div>
+
+    <h2>Phần 1: Chuẩn bị 3 dịch vụ miễn phí (Chỉ mất 5 phút)</h2>
+
+    <h3>1.1. Lấy mã khóa Google Gemini API (Miễn phí 100%)</h3>
+    <div class="step-box">
+      <ol>
+        <li>Truy cập trang: <a href="https://aistudio.google.com/app/apikey" target="_blank"><strong>https://aistudio.google.com/app/apikey</strong></a></li>
+        <li>Đăng nhập tài khoản Gmail của Thầy/Cô.</li>
+        <li>Bấm nút <strong>Create API key</strong> (Tạo khóa API mới) -> Chọn <strong>Create API key in new project</strong>.</li>
+        <li>Sao chép chuỗi ký tự API Key (dạng: <code>MÃ_API_KEY_CỦA_BẠN</code>) và lưu lại.</li>
+      </ol>
+    </div>
+
+    <h3>1.2. Tạo Kho lưu ảnh bài làm học sinh (Cloudinary - Miễn phí)</h3>
+    <div class="step-box">
+      <ol>
+        <li>Truy cập trang: <a href="https://cloudinary.com" target="_blank"><strong>https://cloudinary.com</strong></a> -> Bấm <strong>Sign Up For Free</strong>.</li>
+        <li>Sau khi đăng nhập, tại màn hình Dashboard chính, Thầy/Cô sẽ thấy <strong>Cloud name</strong> (Ví dụ: <code>thayco-storage</code>).</li>
+        <li>Bấm vào biểu tượng <strong>Cài đặt (Bánh răng ⚙️)</strong> ở góc dưới bên trái -> Chọn mục <strong>Upload</strong> (hoặc <strong>Upload presets</strong>).</li>
+        <li>Kéo xuống mục <strong>Upload presets</strong> -> Bấm <strong>Add upload preset</strong>.</li>
+        <li>Tại ô <strong>Signing Mode</strong>: Chuyển từ <em>Signed</em> sang <strong>Unsigned</strong> (Bắt buộc).</li>
+        <li>Tại ô <strong>Upload preset name</strong>: Đặt tên gợi nhớ (Ví dụ: <code>nop_bai_thi</code>).</li>
+        <li>Bấm <strong>Save (Lưu)</strong> ở góc trên bên phải.</li>
+      </ol>
+    </div>
+
+    <h3>1.3. Khởi tạo Cơ sở dữ liệu Firebase (Nếu triển khai ngoài Google AI Studio)</h3>
+    <div class="step-box">
+      <ol>
+        <li>Truy cập: <a href="https://console.firebase.google.com" target="_blank"><strong>https://console.firebase.google.com</strong></a> -> Bấm <strong>Add project (Thêm dự án)</strong>.</li>
+        <li>Đặt tên dự án -> Bấm Tiếp tục cho đến khi hoàn tất.</li>
+        <li>Tại menu bên trái:
+          <ul>
+            <li>Vào <strong>Build -> Authentication</strong> -> Bấm <strong>Get started</strong> -> Chọn tab <em>Sign-in method</em> -> Bật <strong>Email/Password</strong> và <strong>Anonymous</strong>.</li>
+            <li>Vào <strong>Build -> Firestore Database</strong> -> Bấm <strong>Create database</strong> -> Chọn vị trí (ví dụ: <code>asia-southeast1</code>) -> Bấm Hoàn tất.</li>
+          </ul>
+        </li>
+        <li>Vào <strong>Project Settings (Cài đặt dự án ⚙️)</strong> -> Kéo xuống mục <em>Your apps</em> -> Bấm biểu tượng <strong>Web (</>)</strong> -> Sao chép các thông số cấu hình dán vào file <code>firebase-applet-config.json</code>.</li>
+      </ol>
+    </div>
+
+    <h2>Phần 2: Các cách triển khai hệ thống</h2>
+
+    <h3>🚀 Cách 1: Đưa lên Google AI Studio Build (Khuyên dùng - Nhanh & Tự động)</h3>
+    <div class="step-box">
+      <ol>
+        <li>Truy cập: <a href="https://ai.studio/build" target="_blank"><strong>https://ai.studio/build</strong></a></li>
+        <li>Bấm nút <strong>Import</strong> và chọn file nén <code>he-thong-on-thi-thay-co-package.zip</code> (hoặc kết nối qua GitHub).</li>
+        <li>Google AI Studio sẽ tự động khởi tạo cơ sở dữ liệu và môi trường cho Thầy/Cô.</li>
+        <li>Vào mục <strong>Settings / Secrets</strong> -> Thêm biến <code>GEMINI_API_KEY</code> với mã khóa đã lấy ở Bước 1.1.</li>
+        <li>Hệ thống sẵn sàng hoạt động ngay lập tức!</li>
+      </ol>
+    </div>
+
+    <h3>🌐 Cách 2: Triển khai lên Vercel (Để có tên miền riêng chạy 24/7)</h3>
+    <div class="step-box">
+      <ol>
+        <li>Đăng nhập <a href="https://vercel.com" target="_blank"><strong>Vercel.com</strong></a> bằng tài khoản GitHub.</li>
+        <li>Bấm <strong>Add New Project</strong> -> Chọn Repository mã nguồn của Thầy/Cô.</li>
+        <li>Tại mục <strong>Environment Variables</strong>, nhập 3 biến:
+          <ul>
+            <li><code>GEMINI_API_KEY</code>: Mã khóa lấy ở Bước 1.1.</li>
+            <li><code>VITE_CLOUDINARY_CLOUD_NAME</code>: Cloud name lấy ở Bước 1.2.</li>
+            <li><code>VITE_CLOUDINARY_UPLOAD_PRESET</code>: Tên Upload preset lấy ở Bước 1.2.</li>
+          </ul>
+        </li>
+        <li>Bấm nút <strong>Deploy</strong>. Chờ 1-2 phút là website hoàn tất!</li>
+      </ol>
+    </div>
+
+    <h2>Phần 3: Hướng dẫn cài đặt Tiện ích Zalo (Tự động gửi tin nhắn cho Phụ huynh)</h2>
+    <div class="step-box">
+      <ol>
+        <li>Mở trình duyệt Google Chrome hoặc Cốc Cốc trên máy tính.</li>
+        <li>Nhập đường dẫn: <code>chrome://extensions/</code> vào thanh địa chỉ và nhấn Enter.</li>
+        <li>Gạt công tắc <strong>Chế độ dành cho nhà phát triển (Developer mode)</strong> ở góc trên bên phải sang BẬT.</li>
+        <li>Bấm nút <strong>Tải tiện ích đã giải nén (Load unpacked)</strong> -> Tìm chọn thư mục <code>zalo-extension</code> có trong bộ mã nguồn.</li>
+        <li>Mở tab mới truy cập Zalo Web: <a href="https://chat.zalo.me" target="_blank"><strong>https://chat.zalo.me</strong></a> và đăng nhập Zalo cá nhân của Thầy/Cô.</li>
+        <li>Trên ứng dụng chấm thi, khi Thầy/Cô chọn gửi báo điểm, hệ thống tự động kết nối với Zalo Web để gửi tin nhắn đến từng phụ huynh.</li>
+      </ol>
+    </div>
+
+    <h2>Phần 4: Bí quyết tối ưu Prompt chấm bài tự luận AI Gemini</h2>
+    <div class="prompt-box">
+      <p>Khi tạo đề thi tự luận, Thầy/Cô có thể tùy chỉnh yêu cầu chấm trong ô Đáp án/Biểu điểm chi tiết. Dưới đây là các cấu trúc chuẩn giúp AI chấm chính xác 100%:</p>
+
+      <h3>Môn Toán / Tự nhiên (Tính toán, logic từng bước):</h3>
+      <pre>Yêu cầu chấm:
+- Thang điểm tối đa: 10.0 điểm.
+- Chia nhỏ thang điểm:
+  + Bước 1 (Thiết lập công thức/điều kiện): 2.0 điểm
+  + Bước 2 (Các bước biến đổi trung gian): 4.0 điểm
+  + Bước 3 (Kết quả cuối cùng & đơn vị): 4.0 điểm
+- Chấp nhận các cách giải khác nếu logic đúng. Nếu sai kết quả do tính nhầm ở bước cuối, vẫn cho 70% số điểm các bước trước.</pre>
+
+      <h3>Môn Ngữ văn / Tiếng Anh / Xã hội (Ý tứ, hành văn, lập luận):</h3>
+      <pre>Yêu cầu chấm:
+- Thang điểm tối đa: 10.0 điểm.
+- Tiêu chí đánh giá:
+  + Ý tưởng chính & Đúng trọng tâm đề bài: 4.0 điểm
+  + Dẫn chứng thuyết phục, lập luận chặt chẽ: 3.0 điểm
+  + Ngữ pháp, từ vựng và cách diễn đạt mạch lạc: 3.0 điểm
+- Đưa ra nhận xét chi tiết: Chỉ rõ điểm mạnh, điểm cần cải thiện và gợi ý cách hành văn tốt hơn cho học sinh.</pre>
+    </div>
+  </div>
+</body>
+</html>

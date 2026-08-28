@@ -1,0 +1,8 @@
+{
+  "name": "Chấm Bài Tự Luận",
+  "description": "Hệ thống chấm điểm tự luận toán học bằng AI kết hợp nhận diện chữ viết tay qua OCR",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

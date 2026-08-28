@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Zalo Auto Sender",
+  "version": "1.0",
+  "description": "Tự động gửi tin nhắn Zalo cho học sinh. (Anti-ban, 100% Offline)",
+  "permissions": ["storage", "tabs"],
+  "host_permissions": [
+    "*://chat.zalo.me/*",
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content_webapp.js"]
+    },
+    {
+      "matches": ["*://chat.zalo.me/*"],
+      "js": ["content_zalo.js"]
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  }
+}
