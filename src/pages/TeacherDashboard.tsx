@@ -4,12 +4,17 @@ import { db, handleFirestoreError, OperationType, syncTeacherSummary, syncExamsC
 import { collection, query, where, getDocs, addDoc, doc, getDoc, setDoc, deleteDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateEmail, updatePassword, deleteUser } from 'firebase/auth';
-import firebaseConfig from '../../firebase-applet-config.json';
+import firebaseConfigRaw from '../../firebase-applet-config.json';
 import { Link } from 'react-router-dom';
 import { Plus, Users, FileText, LogOut, Edit, Trash2, Upload, X, AlertTriangle, Clock, MessageCircle, RefreshCw, AlertCircle, CheckCircle, BookOpen, Trophy, Medal, Award, Loader2, Edit2, Calculator, Send, ArrowRightLeft, UserPlus } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { syncClassSummary, saveExamMetadata, saveEssayMetadata, saveKnowledgeMetadata, deleteExamMetadata, deleteEssayMetadata, deleteKnowledgeMetadata, syncClassStudentsCover, syncClassDashboardCover } from '../lib/syncUtils';
 import { triggerZaloCampaign } from "../lib/zaloUtils";
+
+const firebaseConfig = {
+  ...firebaseConfigRaw,
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || firebaseConfigRaw.apiKey
+};
 
 // Secondary app for creating users without logging out the main user
 const secondaryApp = getApps().find(app => app.name === 'Secondary') || initializeApp(firebaseConfig, 'Secondary');
