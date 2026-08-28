@@ -256,12 +256,17 @@ export default function Login() {
           >
             TOÁN THẦY TRỌNG 3T
           </h2>
-          <div className="mt-4 flex items-center justify-center space-x-2">
-            <div className="h-px w-8 bg-indigo-200"></div>
-            <p className="text-sm sm:text-base text-indigo-600 font-bold tracking-[0.3em] uppercase drop-shadow-sm" style={{ fontFamily: 'var(--font-display)' }}>
-              Quản lí học thêm
+          <div className="mt-4 flex flex-col items-center justify-center space-y-2 overflow-hidden w-full px-2">
+            <div className="flex items-center justify-center space-x-2 w-full">
+              <div className="hidden sm:block h-px w-8 bg-indigo-200"></div>
+              <p className="text-[10px] sm:text-sm md:text-base whitespace-nowrap text-indigo-600 font-bold tracking-normal sm:tracking-[0.15em] uppercase drop-shadow-sm text-center" style={{ fontFamily: 'var(--font-display)' }}>
+                ÔN TẬP KIẾN THỨC - QUẢN LÝ BÀI TẬP VỀ NHÀ
+              </p>
+              <div className="hidden sm:block h-px w-8 bg-indigo-200"></div>
+            </div>
+            <p className="text-[8.5px] sm:text-xs md:text-sm whitespace-nowrap text-indigo-500 font-semibold tracking-normal sm:tracking-widest uppercase text-center">
+              KẾT NỐI GIỮA GIÁO VIÊN - HỌC SINH - PHỤ HUYNH
             </p>
-            <div className="h-px w-8 bg-indigo-200"></div>
           </div>
         </div>
 
