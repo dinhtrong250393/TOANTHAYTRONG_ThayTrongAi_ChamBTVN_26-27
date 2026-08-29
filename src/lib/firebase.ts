@@ -171,7 +171,8 @@ export const syncEssaysCover = async (teacherId: string) => {
         startTime: data.startTime || '',
         duration: data.duration || 0,
         status: data.status || 'published',
-        submissionSummary: data.submissionSummary || []
+        submissionSummary: data.submissionSummary || [],
+        textbookLessonId: data.textbookLessonId || null
       };
     });
     await setDoc(doc(db, 'teachers_essays_cover', teacherId), { essaysList }, { merge: true });

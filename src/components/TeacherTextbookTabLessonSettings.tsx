@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
 import { doc, updateDoc, collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
+import { syncClassDashboardCover } from '../lib/syncUtils';
+import { syncEssaysCover } from '../lib/firebase';
+import { useAuth } from '../lib/AuthContext';
 import { Loader2, Save } from 'lucide-react';
 
 export default function TeacherTextbookTabLessonSettings({ 
@@ -12,6 +15,7 @@ export default function TeacherTextbookTabLessonSettings({
   teacherClasses: any[],
   onUpdated: (updatedLesson: any) => void
 }) {
+  const { appUser } = useAuth();
   const [assignedClasses, setAssignedClasses] = useState<string[]>(lesson.assignedClasses || []);
   const [startTime, setStartTime] = useState(lesson.startTime || '');
   const [endTime, setEndTime] = useState(lesson.endTime || '');
@@ -54,6 +58,11 @@ export default function TeacherTextbookTabLessonSettings({
       }
 
       onUpdated({ ...lesson, ...updates });
+      const allClassesToSync = Array.from(new Set([...(lesson.assignedClasses || []), ...assignedClasses]));
+      if (appUser?.uid) await syncEssaysCover(appUser.uid);
+      for (const cls of allClassesToSync) {
+        await syncClassDashboardCover(cls);
+      }
       alert('Đã lưu Cài đặt Giao bài thành công! Toàn bộ Đề nhỏ bên trong đã được cập nhật.');
     } catch (err) {
       console.error(err);

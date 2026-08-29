@@ -2024,7 +2024,7 @@ export default function TeacherDashboard() {
 
           {activeTab === 'essays' && (
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-              {essays.length === 0 ? (
+              {essays.filter(e => !e.textbookLessonId).length === 0 ? (
                 <div className="bg-white shadow-sm overflow-hidden sm:rounded-[2rem] border border-slate-200/60 p-6 md:p-8">
                   <div className="text-center">
                     <FileText className="w-16 h-16 mx-auto text-indigo-200 mb-4" />
@@ -2036,7 +2036,7 @@ export default function TeacherDashboard() {
                 </div>
               ) : (
                 (() => {
-                  const groupedEssays = essays.reduce((acc, essay) => {
+                  const groupedEssays = essays.filter(e => !e.textbookLessonId).reduce((acc, essay) => {
                     let block = 'Khác';
                     if (essay.assignedClasses && essay.assignedClasses.length > 0) {
                        const classObj = teacherClasses.find(c => essay.assignedClasses.includes(c.name));
@@ -2219,7 +2219,17 @@ export default function TeacherDashboard() {
 
           {activeTab === 'textbook' && (
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <TeacherTextbookTab teacherClasses={teacherClasses} />
+              <TeacherTextbookTab 
+                teacherClasses={teacherClasses} 
+                handleZaloNotifyNewTask={handleZaloNotifyNewTask}
+                setNotifyModalItem={setNotifyModalItem}
+                setSelectedNotifyClass={setSelectedNotifyClass}
+                setEssayToExtend={setEssayToExtend}
+                setNewEndTime={setNewEndTime}
+                essaySubmissionsCounts={essaySubmissionsCounts}
+                handleSyncOldDataEssay={handleSyncOldDataEssay}
+                syncingEssayId={syncingEssayId}
+              />
             </div>
           )}
 

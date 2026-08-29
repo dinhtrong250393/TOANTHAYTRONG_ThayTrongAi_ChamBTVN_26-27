@@ -225,7 +225,7 @@ export const syncClassDashboardCover = async (className: string) => {
     const essaySnap = await getDocs(qEssays);
     const essaysList = essaySnap.docs.map(doc => {
       const data = doc.data();
-      return { id: doc.id, title: data.title, startTime: data.startTime, endTime: data.endTime, assignedClasses: data.assignedClasses, teacherId: data.teacherId, createdAt: data.createdAt };
+      return { id: doc.id, title: data.title, startTime: data.startTime, endTime: data.endTime, assignedClasses: data.assignedClasses, teacherId: data.teacherId, createdAt: data.createdAt, textbookLessonId: data.textbookLessonId };
     });
 
     const knowledgesMap = new Map();
@@ -259,7 +259,8 @@ export const syncClassDashboardCover = async (className: string) => {
       exams: examsList,
       essays: essaysList,
       knowledges: knowledgesList,
-      lastUpdated: Date.now()
+      lastUpdated: Date.now(),
+      version: 3
     };
 
     try {
@@ -282,7 +283,12 @@ export const fetchClassDataDirectly = async (className: string) => {
   try {
     const coverDoc = await getDoc(doc(db, 'class_dashboard_cover', className));
     if (coverDoc.exists()) {
-      return coverDoc.data();
+      const data = coverDoc.data();
+      if (data.version === 3) {
+        return data;
+      } else {
+        syncClassDashboardCover(className).catch(console.error);
+      }
     }
   } catch (error) {
     console.warn("Could not read class_dashboard_cover:", error);

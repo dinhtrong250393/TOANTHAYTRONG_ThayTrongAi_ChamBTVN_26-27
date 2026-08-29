@@ -327,17 +327,6 @@ export default function StudentDashboard() {
               {activeTab === 'exams' && 'Làm bài tập trắc nghiệm'}
               {activeTab === 'essays' && 'Làm bài tập tự luận'}
               {activeTab === 'textbook' && 'Bài tập SGK'}
-            <button
-              onClick={() => setActiveTab('textbook')}
-              className={`flex items-center px-4 py-2.5 md:py-3.5 rounded-xl md:rounded-2xl transition-all duration-200 whitespace-nowrap ${
-                activeTab === 'textbook'
-                  ? 'bg-indigo-600/10 text-indigo-400 font-bold'
-                  : 'text-slate-400 hover:bg-white/5 hover:text-slate-200 font-medium'
-              }`}
-            >
-              <BookOpen className="w-5 h-5 mr-2 md:mr-3" strokeWidth={activeTab === 'textbook' ? 2.5 : 1.5} />
-              Bài tập SGK
-            </button>
             </h2>
             <div className="flex items-center space-x-4">
                <button onClick={handleRefresh} disabled={isRefreshing} className="flex items-center px-5 py-2.5 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-full hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-sm">

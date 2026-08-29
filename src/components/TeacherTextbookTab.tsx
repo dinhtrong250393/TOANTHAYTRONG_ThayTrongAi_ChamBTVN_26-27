@@ -2,11 +2,33 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../lib/AuthContext';
 import { db } from '../lib/firebase';
 import { collection, query, where, getDocs, addDoc, doc, updateDoc, deleteDoc, orderBy } from 'firebase/firestore';
-import { FolderPlus, BookOpen, Plus, Trash2, Edit2, Loader2, ArrowRight, ChevronRight, Folder, Image as ImageIcon, Settings, FileText } from 'lucide-react';
+import { FolderPlus, BookOpen, Plus, Trash2, Edit2, Loader2, ArrowRight, ChevronRight, Folder, Image as ImageIcon, Settings, FileText, MessageCircle, Send, Award, RefreshCw } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import TeacherTextbookTabLessonSettings from './TeacherTextbookTabLessonSettings';
 
-export default function TeacherTextbookTab({ teacherClasses }: { teacherClasses: any[] }) {
+interface TeacherTextbookTabProps {
+  teacherClasses: any[];
+  handleZaloNotifyNewTask?: (item: any, className: string) => void;
+  setNotifyModalItem?: (item: any) => void;
+  setSelectedNotifyClass?: (cls: string) => void;
+  setEssayToExtend?: (essay: any) => void;
+  setNewEndTime?: (time: string) => void;
+  essaySubmissionsCounts?: Record<string, number>;
+  handleSyncOldDataEssay?: (id: string) => void;
+  syncingEssayId?: string | null;
+}
+
+export default function TeacherTextbookTab({ 
+  teacherClasses,
+  handleZaloNotifyNewTask,
+  setNotifyModalItem,
+  setSelectedNotifyClass,
+  setEssayToExtend,
+  setNewEndTime,
+  essaySubmissionsCounts = {},
+  handleSyncOldDataEssay,
+  syncingEssayId
+}: TeacherTextbookTabProps) {
   const { appUser } = useAuth();
   const navigate = useNavigate();
   
@@ -310,43 +332,140 @@ export default function TeacherTextbookTab({ teacherClasses }: { teacherClasses:
                   Danh sách các Đề đã cắt ({exercises.length})
                 </h4>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {exercises.length === 0 ? (
-                    <div className="col-span-full text-center py-12 border-2 border-dashed border-slate-200 rounded-2xl bg-white">
-                      <ImageIcon className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                      <p className="text-slate-500 font-medium mb-4">Chưa có đề nào được cắt.</p>
-                      <Link 
-                        to={`/teacher/textbook/builder/${currentLesson.id}`}
-                        className="inline-block bg-emerald-100 text-emerald-700 px-6 py-3 rounded-xl font-bold hover:bg-emerald-200 transition-colors"
-                      >
-                        Tải ảnh bài tập lên
-                      </Link>
-                    </div>
-                  ) : (
-                    exercises.map((essay) => (
-                      <div key={essay.id} className="border border-slate-200 rounded-2xl p-5 bg-white hover:shadow-md transition-shadow">
-                        <div className="flex justify-between items-start mb-4">
-                          <h5 className="font-bold text-lg text-slate-800">{essay.title}</h5>
-                          <button onClick={(e) => handleDeleteClick('essays', essay.id, e)} className="text-rose-400 hover:bg-rose-50 p-2 rounded-lg transition-colors">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                        {essay.assignmentImages && essay.assignmentImages.length > 0 && (
-                          <div className="mb-4 h-32 overflow-hidden rounded-xl border border-slate-100 relative bg-slate-50">
-                            <img src={essay.assignmentImages[0]} alt="Đề bài" className="w-full h-full object-cover opacity-80" />
-                            <div className="absolute inset-0 bg-gradient-to-t from-slate-900/50 to-transparent flex items-end p-3">
-                              <span className="text-white text-xs font-bold bg-slate-900/50 px-2 py-1 rounded backdrop-blur-sm">Hình ảnh đề bài</span>
-                            </div>
-                          </div>
-                        )}
-                        <div className="flex space-x-2 mt-4">
-                          <Link to={`/teacher/essay/${essay.id}`} className="flex-1 bg-indigo-50 text-indigo-700 text-center py-2.5 rounded-xl font-bold text-sm hover:bg-indigo-100 transition-colors">
-                            Xem kết quả & Chấm bài
-                          </Link>
-                        </div>
-                      </div>
-                    ))
-                  )}
+                <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                  <ul className="divide-y divide-gray-100">
+                    {exercises.length === 0 ? (
+                      <li className="p-8 text-center">
+                        <ImageIcon className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                        <p className="text-slate-500 font-medium mb-4">Chưa có đề nào được cắt.</p>
+                        <Link 
+                          to={`/teacher/textbook/builder/${currentLesson.id}`}
+                          className="inline-block bg-emerald-100 text-emerald-700 px-6 py-3 rounded-xl font-bold hover:bg-emerald-200 transition-colors"
+                        >
+                          Tải ảnh bài tập lên
+                        </Link>
+                      </li>
+                    ) : (
+                      [...exercises].sort((a, b) => {
+                                    const extractNum = (str) => {
+                                      const m = (str || '').match(/(\d+(?:\.\d+)?)/);
+                                      return m ? parseFloat(m[1]) : Infinity;
+                                    };
+                                    const numA = extractNum(a.title);
+                                    const numB = extractNum(b.title);
+                                    if (numA !== numB) return numA - numB;
+                                    return (a.title || '').localeCompare(b.title || '');
+                                  }).map((essay, index) => (
+                        <li key={essay.id} className="hover:bg-indigo-50/50 transition-colors duration-150">
+                          <div className="px-6 py-5 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+                                  <div className="flex items-start">
+                                    <span className="text-xl font-black text-indigo-200 w-8 flex-shrink-0 mt-0.5">{index + 1}.</span>
+                                    <div>
+                                      <h3 className="text-lg font-bold text-gray-900 truncate mb-1">{essay.title}</h3>
+                                      <p className="mt-2 text-sm text-gray-600 flex items-center">
+                                        <span className="font-medium mr-1">Lớp được giao:</span> {essay.assignedClasses?.join(', ') || 'Chưa giao'}
+                                      </p>
+                                      {(essay.startTime || essay.endTime) && (
+                                        <p className="mt-1 text-sm text-gray-500">
+                                          Thời gian mở: {essay.startTime ? new Date(essay.startTime).toLocaleString('vi-VN') : 'Không giới hạn'} - {essay.endTime ? new Date(essay.endTime).toLocaleString('vi-VN') : 'Không giới hạn'}
+                                        </p>
+                                      )}
+                                      <div className="mt-1 flex items-center space-x-3">
+                                        <p className="text-sm font-semibold text-indigo-600">
+                                          Đã nộp: {essaySubmissionsCounts[essay.id] || 0} học sinh
+                                        </p>
+                                        {essay.submissionSummary === undefined && handleSyncOldDataEssay && (
+                                          <button
+                                            onClick={() => handleSyncOldDataEssay(essay.id)}
+                                            disabled={syncingEssayId === essay.id}
+                                            className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded hover:bg-amber-200 transition-colors flex items-center animate-pulse"
+                                            title="Đồng bộ dữ liệu học sinh nộp bài để tối ưu quota (Tờ bìa)"
+                                          >
+                                            {syncingEssayId === essay.id ? (
+                                              <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
+                                            ) : (
+                                              <RefreshCw className="w-3 h-3 mr-1" />
+                                            )}
+                                            Đồng bộ dữ liệu cũ (Tờ bìa)
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="flex flex-wrap items-center gap-2 mt-3 sm:mt-0 justify-start sm:justify-end">
+                                    {handleZaloNotifyNewTask && (
+                                      <button
+                                        onClick={() => {
+                                          if (essay.assignedClasses && essay.assignedClasses.length > 0) {
+                                              const cls = prompt("Báo bài mới (Zalo cá nhân)\nNhập tên lớp (Ví dụ: " + essay.assignedClasses[0] + "):", essay.assignedClasses[0]);
+                                              if (cls) {
+                                                  handleZaloNotifyNewTask({title: essay.title || 'Bài tập tự luận'}, cls);
+                                              }
+                                          } else {
+                                              alert("Bài này chưa được giao cho lớp nào.");
+                                          }
+                                        }}
+                                        className="px-3 py-1.5 bg-green-50 text-green-600 hover:bg-green-100 rounded-lg font-medium text-sm transition-colors flex items-center"
+                                        title="Báo bài mới (Zalo cá nhân)"
+                                      >
+                                        <Send className="w-4 h-4 mr-1.5" /> Báo (Zalo)
+                                      </button>
+                                    )}
+                                    {setNotifyModalItem && setSelectedNotifyClass && (
+                                      <button
+                                        onClick={() => {
+                                          setNotifyModalItem({
+                                            id: essay.id,
+                                            type: 'essay',
+                                            title: essay.title || 'Bài tập tự luận',
+                                            startTime: essay.startTime,
+                                            endTime: essay.endTime,
+                                            assignedClasses: essay.assignedClasses || []
+                                          });
+                                          setSelectedNotifyClass('');
+                                        }}
+                                        className="px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg font-medium text-sm transition-colors flex items-center"
+                                        title="Báo bài cho lớp"
+                                      >
+                                        <MessageCircle className="w-4 h-4 mr-1.5" /> Báo bài
+                                      </button>
+                                    )}
+                                    {setEssayToExtend && setNewEndTime && (
+                                      <button
+                                        onClick={() => {
+                                          setEssayToExtend(essay);
+                                          setNewEndTime(essay.endTime || '');
+                                        }}
+                                        className="px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg font-medium text-sm transition-colors"
+                                      >
+                                        Gia hạn
+                                      </button>
+                                    )}
+                                    <Link to={`/teacher/essay/${essay.id}/results`} state={{ essay }} className="px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg font-medium text-sm transition-colors">
+                                      Xem kết quả
+                                    </Link>
+                                    <Link
+                                      to={`/teacher/essay/${essay.id}/ranking`}
+                                      className="px-3 py-1.5 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded-lg font-medium text-sm transition-colors flex items-center"
+                                    >
+                                      <Award className="w-4 h-4 mr-1.5" /> Xếp hạng
+                                    </Link>
+                                    <Link
+                                      to={`/teacher/essay/edit/${essay.id}`}
+                                      className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                      title="Chỉnh sửa bài"
+                                    >
+                                      <Edit2 className="w-4 h-4" />
+                                    </Link>
+                                    <button onClick={(e) => handleDeleteClick('essays', essay.id, e)} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="Xóa bài">
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </div>
+                        </li>
+                      ))
+                    )}
+                  </ul>
                 </div>
               </div>
             )}

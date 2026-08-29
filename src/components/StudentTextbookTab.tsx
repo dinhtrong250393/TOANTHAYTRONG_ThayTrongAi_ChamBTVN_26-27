@@ -25,7 +25,7 @@ export default function StudentTextbookTab({ essays, submissions }: { essays: an
           where('assignedClasses', 'array-contains', appUser.className)
         );
         const lessonsSnap = await getDocs(lessonsQ);
-        const lessonsData = lessonsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const lessonsData = lessonsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
 
         if (lessonsData.length === 0) {
           setTree([]);
@@ -208,35 +208,52 @@ export default function StudentTextbookTab({ essays, submissions }: { essays: an
                             {expandedLessons[lesson.id] && (
                               <div className="p-3 bg-white">
                                 {lesson.exercises.length === 0 && <p className="text-sm text-gray-500 italic pl-6">Chưa có bài tập nào</p>}
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-2 md:pl-6">
-                                  {lesson.exercises.map((exercise: any) => {
+                                <div className="pl-2 md:pl-6">
+                                  <ul className="divide-y divide-gray-100 bg-white border border-slate-200 rounded-2xl overflow-hidden">
+                                  {[...lesson.exercises].sort((a, b) => {
+                                    const extractNum = (str) => {
+                                      const m = (str || '').match(/(\d+(?:\.\d+)?)/);
+                                      return m ? parseFloat(m[1]) : Infinity;
+                                    };
+                                    const numA = extractNum(a.title);
+                                    const numB = extractNum(b.title);
+                                    if (numA !== numB) return numA - numB;
+                                    return (a.title || '').localeCompare(b.title || '');
+                                  }).map((exercise: any, index: number) => {
                                     // check if student has submitted
                                     const hasSubmitted = submissions.some(s => s.essayId === exercise.id);
                                     
                                     return (
-                                      <Link 
-                                        key={exercise.id} 
-                                        to={`/student/essay/${exercise.id}`}
-                                        className={`block border rounded-xl p-4 transition-all hover:shadow-md ${
-                                          hasSubmitted ? 'border-emerald-200 bg-emerald-50/30 hover:border-emerald-300' : 'border-slate-200 hover:border-indigo-300'
-                                        }`}
-                                      >
-                                        <div className="flex items-start justify-between">
-                                          <div className="flex items-start space-x-3">
-                                            <div className={`p-2 rounded-lg ${hasSubmitted ? 'bg-emerald-100 text-emerald-600' : 'bg-indigo-100 text-indigo-600'}`}>
-                                              {hasSubmitted ? <CheckCircle className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
-                                            </div>
+                                      <li key={exercise.id} className="hover:bg-indigo-50/50 transition-colors duration-150">
+                                        <div className="px-6 py-5 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+                                          <div className="flex items-start">
+                                            <span className={`text-xl font-black w-8 flex-shrink-0 mt-0.5 ${hasSubmitted ? 'text-emerald-200' : 'text-indigo-200'}`}>{index + 1}.</span>
                                             <div>
-                                              <h3 className="font-bold text-slate-800 line-clamp-2">{exercise.title || 'Bài tập'}</h3>
-                                              <p className={`text-xs mt-1 font-medium ${hasSubmitted ? 'text-emerald-600' : 'text-slate-500'}`}>
-                                                {hasSubmitted ? 'Đã nộp bài' : 'Chưa làm'}
-                                              </p>
+                                              <h3 className="text-lg font-bold text-gray-900 truncate mb-1">{exercise.title || 'Bài tập'}</h3>
+                                              <div className="mt-1 flex items-center space-x-3">
+                                                <p className={`text-sm font-semibold ${hasSubmitted ? 'text-emerald-600' : 'text-slate-500'}`}>
+                                                  {hasSubmitted ? 'Đã nộp bài' : 'Chưa làm'}
+                                                </p>
+                                              </div>
                                             </div>
                                           </div>
+                                          <div className="flex flex-wrap items-center gap-2 mt-3 sm:mt-0 justify-start sm:justify-end">
+                                            <Link
+                                              to={`/student/essay/${exercise.id}`}
+                                              className={`flex items-center px-4 py-2 text-sm font-semibold rounded-xl transition-colors ${
+                                                hasSubmitted 
+                                                  ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                                                  : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+                                              }`}
+                                            >
+                                              {hasSubmitted ? 'Xem lại bài' : 'Làm bài'}
+                                            </Link>
+                                          </div>
                                         </div>
-                                      </Link>
+                                      </li>
                                     );
                                   })}
+                                  </ul>
                                 </div>
                               </div>
                             )}

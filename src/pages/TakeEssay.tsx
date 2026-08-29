@@ -1198,17 +1198,6 @@ export default function TakeEssay() {
               </div>
               
               <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden p-6 md:p-8 flex flex-col space-y-6">
-                {essay.questionText && (
-                  <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm mb-6">
-                    <h4 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
-                      <FileText className="w-5 h-5 mr-2 text-indigo-500" />
-                      Nội dung đề bài
-                    </h4>
-                    <div className="prose max-w-none text-slate-700 whitespace-pre-wrap font-medium leading-relaxed">
-                      {essay.questionText}
-                    </div>
-                  </div>
-                )}
                 {essay.assignmentImages && essay.assignmentImages.length > 0 ? (
                   <div className="space-y-6">
                     {essay.assignmentImages.map((img: string, idx: number) => (
