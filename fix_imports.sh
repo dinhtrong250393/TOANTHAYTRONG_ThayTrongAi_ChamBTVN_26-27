@@ -1,0 +1,2 @@
+sed -i 's/const { saveEssayMetadata, syncEssaysCover, syncClassSummary } = await import("..\/lib\/syncUtils");/const { saveEssayMetadata, syncClassSummary } = await import("..\/lib\/syncUtils");/' src/pages/TextbookBuilder.tsx
+sed -i 's/const { syncEssayResultsCover } = await import("..\/lib\/firebase");/const { syncEssayResultsCover, syncEssaysCover } = await import("..\/lib\/firebase");/' src/pages/TextbookBuilder.tsx

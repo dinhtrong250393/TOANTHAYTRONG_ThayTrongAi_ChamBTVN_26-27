@@ -12,6 +12,7 @@ const StudentExamResult = React.lazy(() => import('./pages/StudentExamResult'));
 const EssayBuilder = React.lazy(() => import('./pages/EssayBuilder'));
 const EssayResults = React.lazy(() => import('./pages/EssayResults'));
 const TakeEssay = React.lazy(() => import('./pages/TakeEssay'));
+const TextbookBuilder = React.lazy(() => import('./pages/TextbookBuilder'));
 
 const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode, allowedRoles?: string[] }) => {
   const { user, appUser, loading } = useAuth();
@@ -81,6 +82,12 @@ const AppRoutes = () => {
         <Route path="/teacher/essay/:essayId/results" element={
           <ProtectedRoute allowedRoles={['teacher']}>
             <EssayResults />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/teacher/textbook/builder/:lessonId" element={
+          <ProtectedRoute allowedRoles={['teacher']}>
+            <TextbookBuilder />
           </ProtectedRoute>
         } />
 

@@ -1,0 +1,2 @@
+sed -i "s/handleDeleteClick(!currentGrade ? 'textbook_grades' : !currentChapter ? 'textbook_chapters' : 'textbook_lessons', item.id);/handleDeleteClick(!currentGrade ? 'textbook_grades' : !currentChapter ? 'textbook_chapters' : 'textbook_lessons', item.id, e);/" src/components/TeacherTextbookTab.tsx
+sed -i "s/onClick={() => handleDelete('essays', essay.id)}/onClick={(e) => handleDeleteClick('essays', essay.id, e)}/" src/components/TeacherTextbookTab.tsx

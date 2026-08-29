@@ -10,6 +10,7 @@ import { Plus, Users, FileText, LogOut, Edit, Trash2, Upload, X, AlertTriangle, 
 import * as XLSX from 'xlsx';
 import { syncClassSummary, saveExamMetadata, saveEssayMetadata, saveKnowledgeMetadata, deleteExamMetadata, deleteEssayMetadata, deleteKnowledgeMetadata, syncClassStudentsCover, syncClassDashboardCover } from '../lib/syncUtils';
 import { triggerZaloCampaign } from "../lib/zaloUtils";
+import TeacherTextbookTab from '../components/TeacherTextbookTab';
 
 const firebaseConfig = {
   ...firebaseConfigRaw,
@@ -29,7 +30,7 @@ interface TeacherDashboardCache {
   activeClass: string | null;
   essaySubmissionsCounts: Record<string, number> | null;
   students: any[] | null;
-  activeTab: 'exams' | 'students' | 'facebook' | 'knowledge' | 'classes' | 'essays' | null;
+  activeTab: 'exams' | 'students' | 'facebook' | 'knowledge' | 'classes' | 'essays' | 'textbook' | null;
   expandedExamBlock?: string | null;
   expandedEssayBlock?: string | null;
   hasFetched?: boolean;
@@ -52,7 +53,7 @@ const dashboardCache: TeacherDashboardCache = {
 
 export default function TeacherDashboard() {
   const { appUser, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState<'exams' | 'students' | 'facebook' | 'knowledge' | 'classes' | 'essays'>(
+  const [activeTab, setActiveTab] = useState<'exams' | 'students' | 'facebook' | 'knowledge' | 'classes' | 'essays' | 'textbook'>(
     dashboardCache.activeTab || 'exams'
   );
   const [expandedExamBlock, setExpandedExamBlock] = useState<string | null>(dashboardCache.expandedExamBlock || null);
@@ -1717,6 +1718,17 @@ export default function TeacherDashboard() {
               Bài tập tự luận
             </button>
             <button
+              onClick={() => setActiveTab('textbook')}
+              className={`flex items-center px-4 py-2.5 md:py-3.5 rounded-xl md:rounded-2xl transition-all duration-200 whitespace-nowrap ${
+                activeTab === 'textbook'
+                  ? 'bg-indigo-600/10 text-indigo-400 font-bold'
+                  : 'text-slate-400 hover:bg-white/5 hover:text-slate-200 font-medium'
+              }`}
+            >
+              <BookOpen className="w-5 h-5 mr-2 md:mr-3" strokeWidth={activeTab === 'textbook' ? 2.5 : 1.5} />
+              Bài tập SGK
+            </button>
+            <button
               onClick={() => setActiveTab('knowledge')}
               className={`flex items-center px-4 py-2.5 md:py-3.5 rounded-xl md:rounded-2xl transition-all duration-200 whitespace-nowrap ${
                 activeTab === 'knowledge'
@@ -1787,6 +1799,7 @@ export default function TeacherDashboard() {
             <h2 className="text-xl md:text-2xl font-bold text-slate-800">
               {activeTab === 'exams' && 'Quản lí Đề thi'}
               {activeTab === 'essays' && 'Bài tập tự luận'}
+              {activeTab === 'textbook' && 'Bài tập Sách Giáo Khoa'}
               {activeTab === 'knowledge' && 'Hệ thống kiến thức'}
               {activeTab === 'students' && 'Quản lý Học sinh & Lớp học'}
               {activeTab === 'classes' && 'Quản lý Lớp học'}
@@ -2201,6 +2214,12 @@ export default function TeacherDashboard() {
                   );
                 })()
               )}
+            </div>
+          )}
+
+          {activeTab === 'textbook' && (
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <TeacherTextbookTab teacherClasses={teacherClasses} />
             </div>
           )}
 

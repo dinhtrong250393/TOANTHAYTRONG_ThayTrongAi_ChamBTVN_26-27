@@ -4,12 +4,13 @@ import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { fetchClassDataDirectly } from '../lib/syncUtils';
 import { collection, query, where, getDocs, getDoc, doc, updateDoc } from 'firebase/firestore';
 import { PenTool } from 'lucide-react';
+import StudentTextbookTab from '../components/StudentTextbookTab';
 import { Link } from 'react-router-dom';
 import { LogOut, PlayCircle, CheckCircle, Loader2, RefreshCw, MessageCircle, AlertCircle, BookOpen, User, Calendar, Settings, LayoutDashboard, Database, FileText } from 'lucide-react';
 
 export default function StudentDashboard() {
   const { appUser, logout, refreshAppUser } = useAuth();
-  const [activeTab, setActiveTab] = useState<'profile' | 'knowledge' | 'exams' | 'essays'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'knowledge' | 'exams' | 'essays' | 'textbook'>('profile');
   
   const [exams, setExams] = useState<any[]>([]);
   const [essays, setEssays] = useState<any[]>([]);
@@ -37,7 +38,8 @@ export default function StudentDashboard() {
   };
 
   const sortedExams = sortItemsByTitleNumber(exams);
-  const sortedEssays = sortItemsByTitleNumber(essays);
+  const regularEssays = essays.filter(e => !e.textbookLessonId);
+  const sortedEssays = sortItemsByTitleNumber(regularEssays);
 
   useEffect(() => {
     if (appUser && (!appUser.facebook || !appUser.zalo)) {
@@ -197,7 +199,7 @@ export default function StudentDashboard() {
   }, [appUser?.completedExams]);
 
   useEffect(() => {
-    if (activeTab === 'knowledge' || activeTab === 'exams' || activeTab === 'essays') {
+    if (activeTab === 'knowledge' || activeTab === 'exams' || activeTab === 'essays' || activeTab === 'textbook') {
       fetchClassSummary();
     }
   }, [activeTab, appUser?.uid, appUser?.className]);
@@ -206,7 +208,7 @@ export default function StudentDashboard() {
     setIsRefreshing(true);
     try {
       await refreshAppUser();
-      if (activeTab === 'knowledge' || activeTab === 'exams' || activeTab === 'essays') {
+      if (activeTab === 'knowledge' || activeTab === 'exams' || activeTab === 'essays' || activeTab === 'textbook') {
         hasFetchedSummaryRef.current = false;
         setTimeout(() => {
           fetchClassSummary(true);
@@ -284,6 +286,17 @@ export default function StudentDashboard() {
               <CheckCircle className="w-5 h-5 mr-2 md:mr-3" strokeWidth={activeTab === 'essays' ? 2.5 : 1.5} />
               Làm bài tập tự luận
             </button>
+            <button
+              onClick={() => setActiveTab('textbook')}
+              className={`flex items-center px-4 py-2.5 md:py-3.5 rounded-xl md:rounded-2xl transition-all duration-200 whitespace-nowrap ${
+                activeTab === 'textbook'
+                  ? 'bg-indigo-600/10 text-indigo-400 font-bold'
+                  : 'text-slate-400 hover:bg-white/5 hover:text-slate-200 font-medium'
+              }`}
+            >
+              <BookOpen className="w-5 h-5 mr-2 md:mr-3" strokeWidth={activeTab === 'textbook' ? 2.5 : 1.5} />
+              Bài tập SGK
+            </button>
           </nav>
         </div>
 
@@ -313,6 +326,18 @@ export default function StudentDashboard() {
               {activeTab === 'knowledge' && 'Hệ thống kiến thức'}
               {activeTab === 'exams' && 'Làm bài tập trắc nghiệm'}
               {activeTab === 'essays' && 'Làm bài tập tự luận'}
+              {activeTab === 'textbook' && 'Bài tập SGK'}
+            <button
+              onClick={() => setActiveTab('textbook')}
+              className={`flex items-center px-4 py-2.5 md:py-3.5 rounded-xl md:rounded-2xl transition-all duration-200 whitespace-nowrap ${
+                activeTab === 'textbook'
+                  ? 'bg-indigo-600/10 text-indigo-400 font-bold'
+                  : 'text-slate-400 hover:bg-white/5 hover:text-slate-200 font-medium'
+              }`}
+            >
+              <BookOpen className="w-5 h-5 mr-2 md:mr-3" strokeWidth={activeTab === 'textbook' ? 2.5 : 1.5} />
+              Bài tập SGK
+            </button>
             </h2>
             <div className="flex items-center space-x-4">
                <button onClick={handleRefresh} disabled={isRefreshing} className="flex items-center px-5 py-2.5 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-full hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-sm">
@@ -669,6 +694,11 @@ export default function StudentDashboard() {
             </div>
           )}
         </div>
+          {activeTab === 'textbook' && (
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <StudentTextbookTab essays={essays} submissions={(appUser as any)?.completedEssays || []} />
+            </div>
+          )}
       </main>
 
       {/* Update Contact Modal */}

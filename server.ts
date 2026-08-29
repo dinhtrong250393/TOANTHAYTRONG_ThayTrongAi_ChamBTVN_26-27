@@ -293,25 +293,82 @@ Chỉ trả về nội dung đã OCR.`;
   }
 
   // API route for converting images to math text/formulas using OCR
+  app.post("/api/solve-textbook-exercise", async (req, res) => {
+    try {
+      const { imageBase64 } = req.body;
+      if (!imageBase64) return res.status(400).json({ error: "No image provided." });
+
+      const prompt = `Bạn là một giáo viên Toán học xuất sắc. Hình ảnh tôi cung cấp là một phần cắt từ Sách giáo khoa hoặc Sách bài tập, chứa MỘT BÀI TẬP DUY NHẤT. Hãy đọc, giải chi tiết và chia barem điểm cho bài tập này (tổng 10 điểm).
+
+BẮT BUỘC TRẢ VỀ JSON HỢP LỆ THEO ĐÚNG ĐỊNH DẠNG SAU, KHÔNG THÊM BẤT KỲ VĂN BẢN NÀO BÊN NGOÀI:
+{
+  "title": "Tên bài tập (VD: Bài 1, Câu 2...)",
+  "questionText": "Nội dung câu hỏi...",
+  "solutionText": "Nội dung bài giải chi tiết, từng bước rõ ràng. Đi kèm mỗi bước là số điểm của bước đó, ví dụ: [Điểm: 0.25]. TỔNG ĐIỂM CÁC BƯỚC PHẢI LÀ 10.0."
+}`;
+
+      let mimeType = "image/jpeg";
+      let base64Data = imageBase64;
+      const matchData = imageBase64.match(/^data:(image\/[a-z]+);base64,([\s\S]+)$/);
+      if (matchData) {
+        mimeType = matchData[1];
+        base64Data = matchData[2].trim();
+      }
+
+      let ai = getGoogleGenAI(getNextApiKey());
+      const response = await ai.models.generateContent({
+        model: "gemini-3.6-flash",
+        contents: [
+          { text: prompt },
+          { inlineData: { mimeType, data: base64Data } }
+        ],
+        config: {
+          safetySettings: [
+            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
+            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" }
+          ]
+        }
+      });
+      
+      let text = response.text || "";
+      let parsed = null;
+      try {
+        let cleanText = text.replace(/\x60\x60\x60json/gi, "").replace(/\x60\x60\x60/g, "").trim();
+        parsed = JSON.parse(cleanText);
+      } catch (parseErr) {
+        console.warn("Could not parse JSON. Falling back to raw text. Text was:", text);
+        parsed = {
+           title: "Bài tập AI",
+           questionText: "Vui lòng xem hình ảnh",
+           solutionText: text
+        };
+      }
+      res.json(parsed);
+    } catch (err: any) {
+      console.error("[API Solve Textbook ERROR]:", err);
+      res.status(500).json({ error: err.message || "Lỗi giải bài SGK" });
+    }
+  });
+
   app.post("/api/ocr-images", async (req, res) => {
     try {
       const { images, type, studentApiKey } = req.body;
       if (!images || !Array.isArray(images) || images.length === 0) {
         return res.status(400).json({ error: "Không tìm thấy hình ảnh để nhận diện." });
       }
-
       console.log(`[API OCR] Nhận diện ${images.length} ảnh dạng ${type || 'general'}...`);
       
       const ocrResults: string[] = [];
       for (let i = 0; i < images.length; i++) {
         if (i > 0) {
           console.log(`[API OCR] Đang nghỉ 1.2s trước ảnh thứ ${i + 1}...`);
-          await sleep(1200);
+          await new Promise(r => setTimeout(r, 1200));
         }
         const text = await runOCR(studentApiKey, images[i], type || 'general');
         ocrResults.push(text);
       }
-
       const combinedText = ocrResults.filter(Boolean).join("\n\n---\n\n");
       res.json({ success: true, text: combinedText });
     } catch (err: any) {
@@ -320,124 +377,60 @@ Chỉ trả về nội dung đã OCR.`;
     }
   });
 
-  // API route for AI grading
-  
-async function fetchImageAsBase64Part(imgStr: string) {
-  if (imgStr.startsWith('http')) {
-    try {
-      const response = await fetchWithTimeout(imgStr);
-      const arrayBuffer = await response.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
-      const base64Data = buffer.toString('base64');
-      const mimeType = response.headers.get('content-type') || 'image/jpeg';
-      return {
-        inlineData: {
-          mimeType: mimeType,
-          data: base64Data
-        }
-      };
-    } catch (e) {
-      console.error('Error fetching image URL for grading:', e);
-      return null;
-    }
-  } else {
-    const match = imgStr.match(/^data:(image\/[a-z]+);base64,([\s\S]+)$/);
-    if (match) {
-      return {
-        inlineData: {
-          mimeType: match[1],
-          data: match[2].trim()
-        }
-      };
-    }
-  }
-  return null;
-}
   app.post("/api/grade-essay", async (req, res) => {
     try {
-      const { submission, essay, studentApiKey } = req.body;
-      if (!submission || !essay) {
-        return res.status(400).json({ error: "Thiếu dữ liệu bài làm hoặc đề bài." });
+      const { essay, submission, studentApiKey } = req.body;
+      if (!essay || !submission) {
+        return res.status(400).json({ error: "Thiếu thông tin bài kiểm tra hoặc bài làm." });
       }
 
-      console.log(`[AI Grading Pipeline] Bắt đầu chấm bài "${essay.title}"...`);
+      const gradingPrompt = `Bạn là một giáo viên chấm thi xuất sắc. Nhiệm vụ của bạn là chấm điểm bài làm tự luận của học sinh dựa trên đề bài và đáp án chuẩn (hoặc barem điểm) của giáo viên đưa ra.
 
-      // 1. Chuẩn bị đề bài
-      let problemText = `Tiêu đề: ${essay.title}\nMô tả: ${essay.description || "Không có mô tả"}\n`;
-      if (essay.assignmentOcrText) {
-        problemText += "\nNội dung đề bài từ văn bản:\n" + essay.assignmentOcrText;
-      } else {
-        problemText += "\nNội dung đề bài: (Xem trực tiếp và phân tích từ hình ảnh đính kèm đề bài nếu có)\n";
-      }
+HÃY THỰC HIỆN CÁC BƯỚC SAU ĐỂ CHẤM ĐIỂM:
+1. **Phân tích đề bài và Barem điểm**: Xem xét kỹ nội dung đề bài (hình ảnh hoặc văn bản) và đáp án của giáo viên (hình ảnh hoặc văn bản). Nắm bắt chuẩn xác số điểm phân bổ cho từng bước (ví dụ: [Điểm: 0.25]). TỔNG ĐIỂM LUÔN LÀ 10. Nếu không có barem, hãy tự phân bổ 10 điểm hợp lý theo độ khó từng câu/bước.
+2. **Đối chiếu Bài làm**: Đọc kỹ hình ảnh bài làm của học sinh, chú ý từng chi tiết nhỏ, nét chữ viết tay, sự logic trong cách trình bày.
+3. **Đánh giá Chi tiết**: Đối chiếu từng phần của bài làm với đáp án. Ghi chú rõ: học sinh làm đúng bước nào (được cộng bao nhiêu điểm), làm sai/thiếu bước nào (bị trừ/không được bao nhiêu điểm).
+4. **Tổng kết Điểm**: Cần có mục tổng kết điểm rõ ràng bằng cụm từ chính xác: "TỔNG ĐIỂM: [Số điểm] / 10" (Ví dụ: TỔNG ĐIỂM: 8.5 / 10). TỐI ĐA LÀ 10 ĐIỂM, LÀM TRÒN ĐẾN 0.25 (ví dụ: 8.0, 8.25, 8.5, 8.75).
 
-      // 2. Chuẩn bị đáp án chuẩn của giáo viên
-      let teacherSolutions = essay.solutionText || "";
-      if (!teacherSolutions) {
-        teacherSolutions = "Chưa cung cấp văn bản đáp án chuẩn. (Xem trực tiếp từ hình ảnh đáp án đính kèm nếu có, hoặc tự giải chi tiết theo đề bài)";
-      }
+ĐỊNH DẠNG TRẢ VỀ (RẤT QUAN TRỌNG):
+**1. Phân tích bài làm**
+- Câu 1 / Bước 1: [Nhận xét...] => [Điểm đạt được]
+- Câu 2 / Bước 2: [Nhận xét...] => [Điểm đạt được]
+...
 
-      // 3. Chuẩn bị bài làm học sinh (nội dung text tự nhập nếu có)
-      let studentAnswerText = submission.text || "";
+**2. Lời khuyên cho học sinh**
+- [Gợi ý cách khắc phục lỗi hoặc lời khen ngợi]
 
-      // 4. Tiến hành chấm điểm chi tiết bằng prompt giáo viên toán học chuyên nghiệp (Multimodal)
-      console.log("[AI Grading Pipeline] Tiến hành chấm điểm so sánh trực tiếp đa phương tiện (Multimodal)...");
-      const gradingPrompt = `Bạn là GIÁO VIÊN TOÁN HỌC CHUYÊN NGHIỆP với 20 năm kinh nghiệm chấm bài.
-Nhiệm vụ: CHẤM BÀI TOÁN bằng cách đọc và phân tích trực tiếp hình ảnh bài làm học sinh, đối chiếu chi tiết với đề bài và đáp án chuẩn.
+**3. TỔNG ĐIỂM: [Số điểm] / 10**
 
-[ĐỀ BÀI]
-\${problemText}
+QUY TẮC TOÁN HỌC: Trình bày công thức toán học một cách trực quan bằng unicode (VD: x², √x, phân số a/b), KHÔNG dùng LaTeX thô (như \\frac).`;
 
-[ĐÁP ÁN CHUẨN CỦA GIÁO VIÊN (KÈM BIỂU ĐIỂM)]
-\${teacherSolutions}
-
-\${studentAnswerText ? \`[BÀI LÀM CỦA HỌC SINH (Văn bản)]: \\n\${studentAnswerText}\` : "[BÀI LÀM CỦA HỌC SINH]: Xem chi tiết nét chữ viết tay và các bước giải trực tiếp từ các hình ảnh bài làm đính kèm bên dưới."}
-
-TIÊU CHÍ CHẤM BÀI KHẮT KHE & CHÍNH XÁC:
-1. SỬ DỤNG ĐÚNG THANG ĐIỂM TỪNG CÂU: Hãy TÌM, ĐỌC KỸ và TUÂN THỦ NGHIÊM NGẶT điểm số tối đa của từng câu/từng phần đã được ghi chú trong "ĐÁP ÁN CHUẨN CỦA GIÁO VIÊN". Tuyệt đối không tự ý phân bổ điểm (Ví dụ: Nếu đáp án ghi Câu 1: (5 điểm), Câu 2: (5 điểm) thì điểm tối đa Câu 1 là 5, Câu 2 là 5).
-2. LINH HOẠT VỀ PHƯƠNG PHÁP: Học sinh có thể giải bằng nhiều phương pháp, cách thức trình bày, hay thứ tự các bước khác với đáp án chuẩn. Nếu phương pháp đó đúng về mặt toán học và dẫn đến kết quả chính xác, hãy CHO ĐIỂM TỐI ĐA phần đó. Không trừ điểm nếu cách trình bày khác biệt nhưng vẫn logic và đầy đủ ý.
-3. CÁC BƯỚC THỰC HIỆN: Lập luận chặt chẽ, biến đổi hợp lệ. Hãy theo dõi kỹ từng bước tính toán.
-4. KẾT QUẢ CUỐI CÙNG: Đáp án đúng/đủ điều kiện, dạng rút gọn/chuẩn (nếu yêu cầu), kèm đơn vị (nếu có).
-
-QUY TẮC TRỪ ĐIỂM (CHỈ ÁP DỤNG KHI LÀM SAI):
-- Nếu sai phương pháp: không tính điểm.
-- Nếu sai tính toán từ một bước giữa chừng: Không tính điểm phần đó và các bước sau dựa trên kết quả sai (trừ khi các phần sau độc lập).
-- Nếu thiếu điều kiện hoặc thiếu kết luận nhưng các bước giải đúng: Trừ điểm nhỏ (ví dụ 0.25 - 0.5 điểm) dựa trên tổng điểm.
-- Chỉ trừ điểm khi có lỗi sai thực sự về toán học, KHÔNG trừ điểm vì trình bày không giống hệt đáp án.
-- Tổng điểm đạt được của từng câu KHÔNG ĐƯỢT VƯỢT QUÁ số điểm tối đa quy định của câu đó.
-- Thang điểm tổng: 10. Chấm điểm chi tiết (cho phép lẻ 0.25, 0.5).
-
-HÃY TRẢ VỀ ĐÚNG ĐỊNH DẠNG SAU (sử dụng Markdown cho đẹp mắt):
-
-### CHI TIẾT CHẤM:
-- **Câu [Số câu]**: [Điểm đạt được] / [Điểm tối đa câu theo đáp án chuẩn]. 
-  - *Lỗi (nếu có)*: [Chỉ ghi ngắn gọn lỗi sai thực sự. Ví dụ: "Sai dấu dòng 3", "Thiếu điều kiện x>0". Nếu đúng hoàn toàn ghi "Làm tốt"].
-  - *Thiếu (nếu có)*: [Mô tả bước quan trọng bị thiếu. Nếu không ghi "Không có"].
-- **Câu [Số câu tiếp theo]**: ... (tương tự)
-
-### TỔNG ĐIỂM: [Số điểm] / 10. (Không làm tròn)
-
-### NHẬN XÉT & GÓP Ý:
-- **Ưu điểm**: [Nhận xét điểm tốt, khen ngợi phương pháp làm sáng tạo hoặc kết quả chính xác]
-- **Nhược điểm**: [Phân tích chi tiết những lỗi sai, lỗ hổng kiến thức học sinh mắc phải]
-- **Khắc phục**: [Đưa ra hướng dẫn cụ thể cách sửa lỗi và gợi ý ôn tập]
-
-QUY TẮC TRÌNH BÀY CÔNG THỨC TOÁN HỌC:
-- KHÔNG sử dụng các đoạn mã LaTeX thô hoặc phức tạp (như \\frac, \\sqrt, \\alpha, \\beta, \\Rightarrow, v.v.).
-- Thay vào đó, hãy viết công thức toán học một cách trực quan, đẹp mắt và dễ hiểu bằng các ký tự unicode toán học thông thường (ví dụ: dùng x², y³, √x, π, ±, ≥, ≤, ≠, dấu chia / hoặc phân số dạng a/b, v.v.). Học sinh và giáo viên cần đọc được ngay trực tiếp mà không cần hệ thống biên dịch mã LaTeX.
-
-LƯU Ý CUỐI:
-- HÃY ĐẢM BẢO BẠN SỬ DỤNG ĐÚNG ĐIỂM TỐI ĐA CHO TỪNG CÂU TỪ ĐÁP ÁN.
-- Tôn trọng các cách giải đúng khác nhau của học sinh.
-- KHÔNG liệt kê lại các bước làm đúng.
-- KHÔNG cần cung cấp đáp án chuẩn hay giải chi tiết của đề bài trong phần đánh giá này.
-- Tập trung vào việc chỉ ra lỗi sai để học sinh sửa.`;
-
-      // 5. Thiết lập mảng parts cho cuộc gọi Multimodal duy nhất
       const promptParts = [];
       promptParts.push({ text: gradingPrompt });
 
-      // Đính kèm ảnh đề bài nếu đề bài gốc chưa được chuyển đổi thành văn bản
-      if (!essay.assignmentOcrText && essay.assignmentImages && essay.assignmentImages.length > 0) {
+      if (essay.questionText) { promptParts.push({ text: "\n\n--- NỘI DUNG ĐỀ BÀI (VĂN BẢN) ---\n" + essay.questionText }); }
+      if (essay.solutionText) { promptParts.push({ text: "\n\n--- ĐÁP ÁN CHUẨN CỦA GIÁO VIÊN (CÓ BAREM ĐIỂM) ---\n" + essay.solutionText }); }
+
+      // Helper to fetch base64 from image URL or passthrough data URI
+      const fetchImageAsBase64Part = async (imgStr) => {
+        let mimeType = 'image/jpeg';
+        let base64Data = '';
+        if (imgStr.startsWith('http')) {
+          try {
+            const response = await fetch(imgStr);
+            const arrayBuffer = await response.arrayBuffer();
+            base64Data = Buffer.from(arrayBuffer).toString('base64');
+            mimeType = response.headers.get('content-type') || 'image/jpeg';
+          } catch (e) { console.error('Error fetching image URL:', e); return null; }
+        } else {
+          const m = imgStr.match(/^data:(image\/[a-z]+);base64,([\s\S]+)$/);
+          if (m) { mimeType = m[1]; base64Data = m[2].trim(); }
+        }
+        if (base64Data) return { inlineData: { mimeType, data: base64Data } };
+        return null;
+      };
+
+      if (!essay.questionText && essay.assignmentImages && essay.assignmentImages.length > 0) {
         promptParts.push({ text: "\n\n--- HÌNH ẢNH ĐỀ BÀI (HÃY ĐỌC ĐỀ BÀI TỪ CÁC HÌNH DƯỚI ĐÂY) ---" });
         for (const img of essay.assignmentImages) {
           const part = await fetchImageAsBase64Part(img);
@@ -445,7 +438,6 @@ LƯU Ý CUỐI:
         }
       }
 
-      // Đính kèm ảnh đáp án của giáo viên nếu chưa có văn bản giải thích chi tiết
       if (!essay.solutionText && essay.solutionImages && essay.solutionImages.length > 0) {
         promptParts.push({ text: "\n\n--- HÌNH ẢNH ĐÁP ÁN CHUẨN CỦA GIÁO VIÊN (HÃY THAM KHẢO) ---" });
         for (const img of essay.solutionImages) {
@@ -454,7 +446,6 @@ LƯU Ý CUỐI:
         }
       }
 
-      // Đính kèm ảnh bài làm của học sinh
       if (submission.images && submission.images.length > 0) {
         promptParts.push({ text: "\n\n--- HÌNH ẢNH BÀI LÀM CỦA HỌC SINH (HÃY PHÂN TÍCH VÀ CHẤM ĐIỂM CHÍNH XÁC NÉT CHỮ VIẾT TAY TRÊN ẢNH DƯỚI ĐÂY) ---" });
         for (const img of submission.images) {
@@ -463,103 +454,16 @@ LƯU Ý CUỐI:
         }
       }
 
-      let response: any = null;
-      let attempt = 0;
-      let currentApiKeyToUse = studentApiKey?.trim();
-      const poolSize = GEMINI_API_KEYS_POOL.length;
-      // Limit to 10 total attempts to avoid infinite hang or socket storm
-      const maxRetries = Math.min(10, (currentApiKeyToUse ? 3 : 0) + (poolSize > 0 ? poolSize : 5));
-      
-      while (attempt < maxRetries) {
-        const resolvedKey = currentApiKeyToUse || getNextApiKey(undefined);
-        try {
-          const ai = getGoogleGenAI(resolvedKey);
-          const modelName = 'gemini-3.6-flash';
-          const responsePromise = ai.models.generateContent({
-            model: modelName,
-            contents: promptParts
-          });
-          const timeoutPromise = new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("Thời gian kết nối AI chấm điểm quá hạn (timeout 45s).")), 45000)
-          );
-          response = await Promise.race([responsePromise, timeoutPromise]);
-          break;
-        } catch (apiErr: any) {
-          attempt++;
-          console.error(`[AI Grading] Chấm điểm lần ${attempt}/${maxRetries} thất bại (Key: ${currentApiKeyToUse ? "Custom" : "System Pool"}):`, apiErr.message || apiErr);
-          if (attempt >= maxRetries) throw apiErr;
-          
-          const hasSystemFallback = GEMINI_API_KEYS_POOL.length > 0 || !!process.env.GEMINI_API_KEY;
-          const isPermanentAuthError = 
-            apiErr.status === 'PERMISSION_DENIED' || 
-            apiErr.status === 403 || 
-            (apiErr.message && (
-              apiErr.message.includes('API key not valid') || 
-              apiErr.message.includes('API_KEY_INVALID') || 
-              apiErr.message.includes('invalid key') ||
-              apiErr.message.includes('PERMISSION_DENIED')
-            ));
-          
-          const isQuotaError = 
-            apiErr.status === 'RESOURCE_EXHAUSTED' || 
-            apiErr.status === 429 || 
-            (apiErr.message && (
-              apiErr.message.includes('exhausted') || 
-              apiErr.message.includes('quota') || 
-              apiErr.message.includes('limit') || 
-              apiErr.message.includes('RESOURCE_EXHAUSTED') ||
-              apiErr.message.includes('429')
-            ));
-          
-          const isOverloadedError = apiErr.status === 503 || apiErr.status === 'UNAVAILABLE' || (apiErr.message && apiErr.message.includes('high demand'));
+      let ai = getGoogleGenAI(getNextApiKey(studentApiKey));
+      const response = await ai.models.generateContent({
+        model: "gemini-3.6-flash",
+        contents: promptParts
+      });
 
-          // Put failing key on cooldown
-          if (resolvedKey) {
-            if (isPermanentAuthError) {
-              console.warn(`[AI Grading Key Cooldown] API Key lỗi auth. Đặt cooldown 1 giờ cho key: ${resolvedKey.substring(0, 8)}...`);
-              keysCooldown.set(resolvedKey, Date.now() + 3600000); // 1 hour
-            } else if (isQuotaError) {
-              console.warn(`[AI Grading Key Cooldown] API Key hết Quota. Đặt cooldown 1 phút cho key: ${resolvedKey.substring(0, 8)}...`);
-              keysCooldown.set(resolvedKey, Date.now() + 60000); // 1 minute
-            }
-          }
-
-          if (currentApiKeyToUse && hasSystemFallback && (isPermanentAuthError || isQuotaError)) {
-            console.warn(`[AI Grading Fallback] API Key học sinh gặp sự cố (${apiErr.message || "Quota/Auth Error"}). Tự động chuyển hướng dự phòng sang Pool API Key hệ thống! Chuyển ngay lập tức không thử lại.`);
-            currentApiKeyToUse = undefined; // Trigger system pool on subsequent attempts
-            await new Promise(r => setTimeout(r, 400)); // small delay before fallback
-            continue; // Immediately try next key from pool
-          }
-          
-          if (!currentApiKeyToUse && (isPermanentAuthError || isQuotaError)) {
-            if (poolSize > 1) {
-              await new Promise(r => setTimeout(r, 400)); // brief wait to prevent rate-limit socket floods
-              continue; // immediately try the next key from the pool
-            }
-          }
-          
-          let backoffTime = Math.pow(2, attempt) * 1000;
-          if (isQuotaError) {
-             console.warn(`[AI Grading Quota] Quota exceeded. Waiting 8s before retry...`);
-             backoffTime = 8000; // wait 8 seconds for quota reset
-          } else if (isOverloadedError) {
-             console.warn(`[AI Grading Overload] API Overloaded. Waiting 3s before retry...`);
-             backoffTime = 3000; // wait 3 seconds
-          }
-          await new Promise(r => setTimeout(r, backoffTime));
-        }
-      }
-
-      if (!response || !response.text) {
-        throw new Error("AI không trả về kết quả chấm điểm.");
-      }
-
-      const aiFeedback = response.text;
+      const aiFeedback = response.text || "";
       const score = extractScoreFromText(aiFeedback);
-
-      console.log(`[AI Grading Pipeline] Chấm điểm thành công. Điểm số: ${score}/10`);
       res.json({ aiFeedback, score });
-    } catch (err: any) {
+    } catch (err) {
       console.error("[AI Grading Pipeline ERROR]:", err);
       res.status(500).json({ error: err.message || "Lỗi khi chấm điểm AI tự luận" });
     }
@@ -567,12 +471,14 @@ LƯU Ý CUỐI:
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
   } else {
+    const path = await import("path");
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
