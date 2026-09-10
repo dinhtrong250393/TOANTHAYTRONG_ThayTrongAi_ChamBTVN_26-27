@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, Link, useLocation } from 'react-router-dom';
+import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/AuthContext';
 import { db, handleFirestoreError, OperationType, syncTeacherSummary, syncExamResultsCover } from '../lib/firebase';
 import { triggerZaloCampaign } from '../lib/zaloUtils';
@@ -12,6 +12,7 @@ import { syncClassSummary, syncClassStudentsCover } from '../lib/syncUtils';
 export default function ExamResults() {
   const { examId } = useParams<{ examId: string }>();
   const location = useLocation();
+  const navigate = useNavigate();
   const { appUser } = useAuth();
   const [exam, setExam] = useState<any>(null);
   const [submissions, setSubmissions] = useState<any[]>([]);
@@ -472,9 +473,9 @@ export default function ExamResults() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-8 bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div className="flex items-center">
-            <Link to="/teacher" className="text-gray-400 hover:text-indigo-600 mr-4 transition-colors p-2 hover:bg-indigo-50 rounded-full">
+            <button onClick={() => navigate(-1)} className="text-gray-400 hover:text-indigo-600 mr-4 transition-colors p-2 hover:bg-indigo-50 rounded-full">
               <ArrowLeft className="w-6 h-6" />
-            </Link>
+            </button>
             <div>
               <h1 className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600">Kết quả: {exam.title}</h1>
               <p className="text-sm font-medium text-gray-500 mt-1 flex items-center gap-3">

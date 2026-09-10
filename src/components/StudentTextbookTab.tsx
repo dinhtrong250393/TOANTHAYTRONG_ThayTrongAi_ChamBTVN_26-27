@@ -5,13 +5,15 @@ import { collection, query, where, getDocs, documentId } from 'firebase/firestor
 import { ChevronDown, ChevronRight, BookOpen, FileText, CheckCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
+const studentTextbookCache = { expandedGrades: {} as any, expandedChapters: {} as any, expandedLessons: {} as any };
 export default function StudentTextbookTab({ essays, submissions }: { essays: any[], submissions: any[] }) {
   const { appUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [tree, setTree] = useState<any[]>([]);
-  const [expandedGrades, setExpandedGrades] = useState<Record<string, boolean>>({});
-  const [expandedChapters, setExpandedChapters] = useState<Record<string, boolean>>({});
-  const [expandedLessons, setExpandedLessons] = useState<Record<string, boolean>>({});
+  const [expandedGrades, setExpandedGrades] = useState<Record<string, boolean>>(studentTextbookCache.expandedGrades);
+  const [expandedChapters, setExpandedChapters] = useState<Record<string, boolean>>(studentTextbookCache.expandedChapters);
+  const [expandedLessons, setExpandedLessons] = useState<Record<string, boolean>>(studentTextbookCache.expandedLessons);
+  useEffect(() => { studentTextbookCache.expandedGrades = expandedGrades; studentTextbookCache.expandedChapters = expandedChapters; studentTextbookCache.expandedLessons = expandedLessons; }, [expandedGrades, expandedChapters, expandedLessons]);
 
   useEffect(() => {
     if (!appUser?.className) return;

@@ -139,6 +139,7 @@ export default function TeacherDashboard() {
   const [availableClasses, setAvailableClasses] = useState<string[]>(dashboardCache.availableClasses || []);
   const [isFetchingStudents, setIsFetchingStudents] = useState(false);
   const [essayToExtend, setEssayToExtend] = useState<any>(null);
+  const [essayUpdatedSignal, setEssayUpdatedSignal] = useState(0);
   const [essaySubmissionsCounts, setEssaySubmissionsCounts] = useState<Record<string, number>>(dashboardCache.essaySubmissionsCounts || {});
 
   useEffect(() => {
@@ -1354,6 +1355,7 @@ export default function TeacherDashboard() {
       
       // update local
       setEssays(essays.map(e => e.id === essayToExtend.id ? { ...e, endTime: newEndTime } : e));
+      setEssayUpdatedSignal(prev => prev + 1);
       await syncEssaysCover(appUser.uid);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `essays/${essayToExtend.id}`);
@@ -2229,6 +2231,7 @@ export default function TeacherDashboard() {
                 essaySubmissionsCounts={essaySubmissionsCounts}
                 handleSyncOldDataEssay={handleSyncOldDataEssay}
                 syncingEssayId={syncingEssayId}
+                essayUpdatedSignal={essayUpdatedSignal}
               />
             </div>
           )}

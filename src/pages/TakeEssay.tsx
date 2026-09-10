@@ -809,7 +809,7 @@ export default function TakeEssay() {
           <div className="flex justify-between items-center h-16 md:h-20 gap-4">
             <div className="flex items-center min-w-0 space-x-3 md:space-x-4">
               <button 
-                onClick={() => navigate('/student')} 
+                onClick={() => navigate(-1)} 
                 className="p-2.5 -ml-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-all shrink-0"
                 title="Quay lại danh sách"
               >

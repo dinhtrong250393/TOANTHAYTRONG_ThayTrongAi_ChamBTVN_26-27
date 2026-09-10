@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../lib/AuthContext';
 import { db } from '../lib/firebase';
 import { collection, query, where, getDocs, addDoc, doc, updateDoc, deleteDoc, orderBy } from 'firebase/firestore';
-import { FolderPlus, BookOpen, Plus, Trash2, Edit2, Loader2, ArrowRight, ChevronRight, Folder, Image as ImageIcon, Settings, FileText, MessageCircle, Send, Award, RefreshCw } from 'lucide-react';
+import { FolderPlus, BookOpen, Plus, Trash2, Edit2, Loader2, ArrowRight, ChevronRight, Folder, Image as ImageIcon, Settings, FileText, MessageCircle, Send, Award, RefreshCw, ArrowLeft } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import TeacherTextbookTabLessonSettings from './TeacherTextbookTabLessonSettings';
 
@@ -16,8 +16,10 @@ interface TeacherTextbookTabProps {
   essaySubmissionsCounts?: Record<string, number>;
   handleSyncOldDataEssay?: (id: string) => void;
   syncingEssayId?: string | null;
+  essayUpdatedSignal?: number;
 }
 
+const teacherTextbookCache = { currentGrade: null as any, currentChapter: null as any, currentLesson: null as any };
 export default function TeacherTextbookTab({ 
   teacherClasses,
   handleZaloNotifyNewTask,
@@ -27,7 +29,8 @@ export default function TeacherTextbookTab({
   setNewEndTime,
   essaySubmissionsCounts = {},
   handleSyncOldDataEssay,
-  syncingEssayId
+  syncingEssayId,
+  essayUpdatedSignal
 }: TeacherTextbookTabProps) {
   const { appUser } = useAuth();
   const navigate = useNavigate();
@@ -39,9 +42,10 @@ export default function TeacherTextbookTab({
   const [lessons, setLessons] = useState<any[]>([]);
   const [exercises, setExercises] = useState<any[]>([]); // These are essays
   
-  const [currentGrade, setCurrentGrade] = useState<any>(null);
-  const [currentChapter, setCurrentChapter] = useState<any>(null);
-  const [currentLesson, setCurrentLesson] = useState<any>(null);
+  const [currentGrade, setCurrentGrade] = useState<any>(teacherTextbookCache.currentGrade);
+  const [currentChapter, setCurrentChapter] = useState<any>(teacherTextbookCache.currentChapter);
+  const [currentLesson, setCurrentLesson] = useState<any>(teacherTextbookCache.currentLesson);
+  useEffect(() => { teacherTextbookCache.currentGrade = currentGrade; teacherTextbookCache.currentChapter = currentChapter; teacherTextbookCache.currentLesson = currentLesson; }, [currentGrade, currentChapter, currentLesson]);
 
   const [newItemName, setNewItemName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
@@ -121,7 +125,7 @@ export default function TeacherTextbookTab({
       setLoading(false);
     };
     fetchExercises();
-  }, [currentLesson]);
+  }, [currentLesson, essayUpdatedSignal]);
 
   const handleCreate = async () => {
     if (!newItemName.trim() || !appUser?.uid) return;
@@ -189,6 +193,19 @@ export default function TeacherTextbookTab({
     <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
       {/* Breadcrumb Header */}
       <div className="bg-slate-50 border-b border-slate-200 p-4 md:p-6 flex items-center space-x-2 text-sm md:text-base overflow-x-auto">
+        {(currentGrade || currentChapter || currentLesson) && (
+          <button 
+            onClick={() => {
+              if (currentLesson) setCurrentLesson(null);
+              else if (currentChapter) setCurrentChapter(null);
+              else if (currentGrade) setCurrentGrade(null);
+            }}
+            className="p-1.5 mr-2 bg-white rounded-full border border-slate-200 shadow-sm hover:bg-slate-100 text-slate-600 transition-colors"
+            title="Quay lại"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+        )}
         <button 
           onClick={() => { setCurrentGrade(null); setCurrentChapter(null); setCurrentLesson(null); }}
           className={`font-bold whitespace-nowrap flex items-center ${!currentGrade ? 'text-indigo-600' : 'text-slate-500 hover:text-indigo-600'}`}
@@ -451,7 +468,7 @@ export default function TeacherTextbookTab({
                                       <Award className="w-4 h-4 mr-1.5" /> Xếp hạng
                                     </Link>
                                     <Link
-                                      to={`/teacher/essay/edit/${essay.id}`}
+                                      to={`/teacher/essay/${essay.id}/edit`}
                                       className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
                                       title="Chỉnh sửa bài"
                                     >

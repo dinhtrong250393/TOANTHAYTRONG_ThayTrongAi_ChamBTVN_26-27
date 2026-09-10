@@ -82,7 +82,7 @@ Nhiệm vụ: Chuyển đổi hình ảnh bài làm thành văn bản.
 
 export async function gradeEssayClient(submission: any, essay: any): Promise<{ aiFeedback: string, score: number | string }> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 55000); // 55s timeout
+  const timeoutId = setTimeout(() => controller.abort(), 90000); // 90s timeout
   
   try {
     const response = await fetch('/api/grade-essay', {
@@ -111,7 +111,7 @@ export async function gradeEssayClient(submission: any, essay: any): Promise<{ a
     clearTimeout(timeoutId);
     console.error("Client side grading error:", err);
     if (err.name === 'AbortError') {
-      throw new Error("Quá hạn thời gian chấm bài (Timeout 55s). Hệ thống tự động dừng để tránh bị treo.");
+      throw new Error("Quá hạn thời gian chấm bài (Timeout 90s). Hệ thống tự động dừng để tránh bị treo.");
     }
     throw new Error(err.message || "Lỗi không xác định khi chấm điểm.");
   }

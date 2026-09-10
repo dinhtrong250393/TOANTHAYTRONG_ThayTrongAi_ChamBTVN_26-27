@@ -305,9 +305,9 @@ export default function EssayBuilder() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16 md:h-20">
             <div className="flex items-center">
-              <Link to="/teacher" className="p-2 -ml-2 mr-2 md:mr-4 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors">
+              <button onClick={() => navigate(-1)} className="p-2 -ml-2 mr-2 md:mr-4 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors">
                 <ArrowLeft className="w-6 h-6" />
-              </Link>
+              </button>
               <div>
                 <h1 className="text-xl md:text-2xl font-bold text-slate-900 leading-tight">
                   {essayId ? 'Chỉnh sửa Bài tập Tự luận' : 'Tạo Bài tập Tự luận Mới'}

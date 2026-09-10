@@ -8,9 +8,11 @@ import StudentTextbookTab from '../components/StudentTextbookTab';
 import { Link } from 'react-router-dom';
 import { LogOut, PlayCircle, CheckCircle, Loader2, RefreshCw, MessageCircle, AlertCircle, BookOpen, User, Calendar, Settings, LayoutDashboard, Database, FileText } from 'lucide-react';
 
+const studentDashboardCache = { activeTab: "profile" as any };
 export default function StudentDashboard() {
   const { appUser, logout, refreshAppUser } = useAuth();
-  const [activeTab, setActiveTab] = useState<'profile' | 'knowledge' | 'exams' | 'essays' | 'textbook'>('profile');
+  const [activeTab, setActiveTab] = useState<"profile" | "knowledge" | "exams" | "essays" | "textbook">(studentDashboardCache.activeTab);
+  useEffect(() => { studentDashboardCache.activeTab = activeTab; }, [activeTab]);
   
   const [exams, setExams] = useState<any[]>([]);
   const [essays, setEssays] = useState<any[]>([]);

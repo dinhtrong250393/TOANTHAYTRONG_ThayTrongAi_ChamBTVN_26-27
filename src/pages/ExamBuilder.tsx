@@ -645,9 +645,9 @@ export default function ExamBuilder() {
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-8 flex items-center justify-between">
           <div className="flex items-center">
-            <Link to="/teacher" className="text-gray-500 hover:text-indigo-600 mr-4 transition-colors bg-white p-2 rounded-full shadow-sm hover:shadow-md">
+            <button onClick={() => navigate(-1)} className="text-gray-500 hover:text-indigo-600 mr-4 transition-colors bg-white p-2 rounded-full shadow-sm hover:shadow-md">
               <ArrowLeft className="w-6 h-6" />
-            </Link>
+            </button>
             <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600">
               {examId ? 'Chỉnh sửa Đề Thi' : 'Tạo Đề Thi Mới'}
             </h1>
