@@ -78,7 +78,13 @@ async function startServer() {
           const match = text.match(/```(?:json)?\s*([\s\S]*?)```/);
           if (match) text = match[1];
           text = text.trim();
-          jsonResult = JSON.parse(text);
+          // Sanitize text for common LaTeX unescaped backslashes before parsing
+          let sanitizedText = text.replace(/\\([^"\\/bfnrtu])/g, '\\\\$1');
+          try {
+            jsonResult = JSON.parse(sanitizedText);
+          } catch (parseErr) {
+            jsonResult = JSON.parse(text);
+          }
           break;
         } catch (e: any) {
           if (attempt === 2) throw new Error("Lỗi gọi AI: " + (e.message || e) + (text ? (" | Output: " + text) : ""));
@@ -106,7 +112,11 @@ Nhiệm vụ của bạn:
 3. Đối chiếu từng bước giải quyết trong bài làm của học sinh với lời giải chuẩn.
 4. NẾU học sinh giải quyết bài toán theo một cách KHÁC biệt so với đáp án chuẩn NHƯNG logic vẫn đúng và ra kết quả đúng, HÃY CÔNG NHẬN CÁCH LÀM ĐÓ và cho điểm tối đa cho phần đó.
 5. Đưa ra nhận xét chi tiết, công tâm: chỉ ra điểm đúng, điểm sai, lỗi tư duy hoặc lỗi tính toán (nếu có), và gọi ý cách khắc phục.
-6. Đưa ra điểm số cuối cùng (từ 0 đến 10, có thể lẻ đến 0.25).
+6. KIỂM TRA KỸ THANG ĐIỂM (BAREM): Bạn BẮT BUỘC phải bám sát thang điểm (barem) của từng ý, từng câu được ghi trong Đề bài hoặc Lời giải chuẩn. 
+   - NẾU câu A được giao 5.0 điểm, BẠN CHỈ ĐƯỢC CHẤM TỐI ĐA 5.0 ĐIỂM cho câu A (không được chấm 4.0 hay 6.0).
+   - Cộng tổng điểm đạt được một cách chính xác và lô-gic nhất (từ 0 đến 10, có thể lẻ đến 0.25).
+
+LƯU Ý QUAN TRỌNG VỀ JSON: NẾU TRONG NHẬN XÉT CÓ SỬ DỤNG CÔNG THỨC TOÁN HỌC LATEX (VD: \infty, \geq), BẠN PHẢI ESCAPE DẤU BACKSLASH THÀNH 2 DẤU (VD: \\infty, \\geq) ĐỂ ĐẢM BẢO CHUỖI JSON HỢP LỆ.
 
 TRẢ VỀ KẾT QUẢ DƯỚI DẠNG JSON TUYỆT ĐỐI THEO ĐỊNH DẠNG SAU:
 {
@@ -180,7 +190,13 @@ ${essay.solutionText || 'Không có lời giải chuẩn, hãy tự giải và c
           const match = text.match(/```(?:json)?\s*([\s\S]*?)```/);
           if (match) text = match[1];
           text = text.trim();
-          jsonResult = JSON.parse(text);
+          // Sanitize text for common LaTeX unescaped backslashes before parsing
+          let sanitizedText = text.replace(/\\([^"\\/bfnrtu])/g, '\\\\$1');
+          try {
+            jsonResult = JSON.parse(sanitizedText);
+          } catch (parseErr) {
+            jsonResult = JSON.parse(text);
+          }
           break;
         } catch (e: any) {
           if (attempt === 2) throw new Error("Lỗi gọi AI: " + (e.message || e) + (text ? (" | Output: " + text) : ""));
